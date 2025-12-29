@@ -1,0 +1,2 @@
+anthropic>=0.39.0
+datasets  # 用于下载 DocFinQA 数据集（可选）

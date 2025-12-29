@@ -1,0 +1,3136 @@
+================================================================================
+RESULTS WITH SKILLS
+================================================================================
+
+【Sample 1】
+Question: what is the net change in net revenue during 2015 for entergy corporation?
+Ground Truth: 94
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is an **Absolute Change** question - asking for the net change in net revenue during 2015.
+
+## STEP 2: Locate the Data
+
+Looking at the table provided, I can see:
+- 2014 net revenue (starting point)
+- 2015 net revenue (ending point)
+- Various components showing the changes between these periods
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Net Revenue 2014 = $5,735 million (from "2014 net revenue" row)
+Data Point 2: Net Revenue 2015 = $5,829 million (from "2015 net revenue" row)
+
+Verification:
+- Years correct (2014 to 2015)? ✓
+- Both in millions? ✓
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For net change: **New - Old**
+
+Formula: Net Change = 2015 Net Revenue - 2014 Net Revenue
+
+## STEP 5: Calculate
+
+```
+Formula: Net Change = 2015 - 2014
+Substitution: Net Change = $5,829 - $5,735
+Calculation: Net Change = $94 million
+```
+
+## STEP 6: Format the Answer
+
+The question asks for "net change" in dollars, so the answer should be a plain number representing millions of dollars.
+
+**Verification**: The table shows various components (retail electric price +187, volume/weather +95, waterford provision -32, miso deferral -35, customer credits -107, other -14) which sum to: 187 + 95 - 32 - 35 - 107 - 14 = 94 ✓
+
+This confirms our calculation is correct.
+
+Answer: 94
+
+--- Extracted Answer ---
+Answer: 94
+Correct: ✓
+================================================================================
+
+【Sample 2】
+Question: what percentage of total facilities as measured in square feet are leased?
+Ground Truth: 14%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage calculation** question: "What percentage of total facilities are leased?"
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need:
+- Total leased facilities (in square feet)
+- Total facilities overall (in square feet)
+
+The table shows facilities measured in millions of square feet with three columns: United States, Other Countries, and Total.
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Leased facilities = 8.1 million square feet (from "leased facilities2" row, "total" column)
+
+**Data Point 2:** Total facilities = 56.0 million square feet (from "total facilities" row, "total" column)
+
+**Verification:**
+- Units consistent? ✓ (both in millions of square feet)
+- Numbers reasonable? ✓ (leased < total: 8.1 < 56.0)
+- Correct rows selected? ✓ (leased facilities and total facilities)
+
+## STEP 4: Choose the Right Formula
+
+For percentage calculation:
+**Formula:** (Part / Total) × 100
+
+Where:
+- Part = Leased facilities = 8.1
+- Total = Total facilities = 56.0
+
+## STEP 5: Calculate
+
+**Substitution:** (8.1 / 56.0) × 100
+
+**Calculation:** 
+- 8.1 ÷ 56.0 = 0.14464...
+- 0.14464... × 100 = 14.464...%
+- Rounded: 14.46%
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 14.464285714285714
+Rounded (2 decimals): 14.46
+Rounded (1 decimal): 14.5
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I should format with the % symbol. Given the precision of the calculation, 14.46% is appropriate.
+
+**Answer: 14.46%**
+
+--- Extracted Answer ---
+Answer: 14.46%**
+Correct: ✓
+================================================================================
+
+【Sample 3】
+Question: what is the percentage change in cash flow hedges in 2011 compare to the 2010?
+Ground Truth: 9.9%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage Change** question - asking for the percentage change in cash flow hedges from 2010 to 2011.
+
+## STEP 2: Locate the Data
+
+Looking at the provided text, I need to find cash flow hedge values for 2010 and 2011.
+
+From the text:
+"The notional amount of derivatives designated as cash flow hedges and undesignated hedges was **$41.2 million** and **$42.1 million**, respectively."
+
+The context indicates these are for October 29, 2011 and October 30, 2010.
+
+## STEP 3: Extract and Verify
+
+Let me carefully identify which value corresponds to which year:
+
+**Data Point 1:** Cash flow hedges 2011 = $41.2 million (October 29, 2011)
+**Data Point 2:** Cash flow hedges 2010 = $42.1 million (October 30, 2010)
+
+Verification:
+- Years correct? ✓ (2010 comes before 2011)
+- Units consistent? ✓ (both in millions)
+- Values reasonable? ✓ (similar magnitudes)
+
+## STEP 4: Choose the Right Formula
+
+For percentage change:
+**Formula:** `((New - Old) / Old) × 100`
+
+Where:
+- Old = 2010 value = $42.1 million
+- New = 2011 value = $41.2 million
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: -2.1377672209026097
+Rounded (2 decimals): -2.14
+Rounded (1 decimal): -2.1
+**Calculation:**
+- Change = 41.2 - 42.1 = -0.9
+- Percentage Change = (-0.9 / 42.1) × 100 = -2.14%
+
+## STEP 6: Format the Answer
+
+The question asks for "percentage change," so the answer should include the % symbol.
+
+The negative value indicates a decrease from 2010 to 2011.
+
+## Self-Check
+- [ ] Correct time period? ✓ (2010 to 2011)
+- [ ] Units consistent? ✓ (both in millions)
+- [ ] Correct formula? ✓ (percentage change formula)
+- [ ] Format matches question? ✓ (percentage)
+- [ ] Magnitude reasonable? ✓ (small decrease of ~2%)
+
+Answer: -2.14%
+
+--- Extracted Answer ---
+Answer: -2.14%
+Correct: ✗
+================================================================================
+
+【Sample 4】
+Question: what portion of total purchase price is related to stock awards?
+Ground Truth: 2.9%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what portion (percentage) of the total purchase price is related to stock awards.
+
+## STEP 2: Locate the Data
+
+Looking at the table provided, I can see:
+- Total purchase price
+- Value of metavante stock awards
+- Value of metavante common stock
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Value of metavante stock awards = $121.4 million (from table)
+Data Point 2: Total purchase price = $4,187.8 million (from table)
+
+Verification:
+- Both values in millions? ✓
+- Stock awards ($121.4M) + Common stock ($4,066.4M) = Total ($4,187.8M)? ✓
+- Numbers reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+Since the question asks "what portion," this is a percentage calculation:
+
+**Formula: (Part / Total) × 100**
+
+Where:
+- Part = Value of stock awards
+- Total = Total purchase price
+
+## STEP 5: Calculate
+
+```
+Formula: (Stock Awards / Total Purchase Price) × 100
+Substitution: (121.4 / 4,187.8) × 100
+Calculation: 0.02899... × 100 = 2.90%
+Result: 2.9%
+```
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 2.89889679545346
+Rounded (2 decimals): 2.9
+Rounded (1 decimal): 2.9
+## STEP 6: Format the Answer
+
+The question asks for "what portion," which typically expects a percentage format.
+
+Rounded to one decimal place: **2.9%**
+
+Answer: 2.9%
+
+--- Extracted Answer ---
+Answer: 2.9%
+Correct: ✓
+================================================================================
+
+【Sample 5】
+Question: what was the difference in percentage cumulative total shareholder return on masco common stock versus the s&p 500 index for the five year period ended 2017?
+Ground Truth: 
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is asking for the **difference in percentage cumulative total shareholder return** between two investments over a five-year period (2012-2017). This requires:
+1. Finding the cumulative return for Masco
+2. Finding the cumulative return for S&P 500 Index
+3. Calculating the difference
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need:
+- Initial investment: $100 (on December 31, 2012)
+- Masco value at end of 2017: $318.46
+- S&P 500 Index value at end of 2017: $206.49
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Masco 2017 = $318.46 (from "masco" row, "2017" column)
+Data Point 2: S&P 500 Index 2017 = $206.49 (from "s&p 500 index" row, "2017" column)
+Data Point 3: Initial Investment = $100 (stated in the problem)
+
+Verification:
+- Both values are from 2017? ✓
+- Both started with $100 investment in 2012? ✓
+- Values are reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For cumulative total return percentage:
+**Cumulative Return % = ((Final Value - Initial Value) / Initial Value) × 100**
+
+Then find the difference between the two returns.
+
+## STEP 5: Calculate
+
+**Masco Cumulative Return:**
+- Formula: ((318.46 - 100) / 100) × 100
+- Calculation: (218.46 / 100) × 100 = 218.46%
+
+**S&P 500 Index Cumulative Return:**
+- Formula: ((206.49 - 100) / 100) × 100
+- Calculation: (106.49 / 100) × 100 = 106.49%
+
+**Difference:**
+- Formula: Masco Return - S&P 500 Return
+- Calculation: 218.46% - 106.49% = 111.97%
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 111.96999999999996
+Rounded (2 decimals): 111.97
+Rounded (1 decimal): 112.0
+## STEP 6: Format the Answer
+
+The question asks for "the difference in percentage cumulative total shareholder return," so the answer should be expressed as a percentage.
+
+**Self-Check:**
+- [ ] Correct time period (2012-2017)? ✓
+- [ ] Used correct values from table? ✓
+- [ ] Applied correct formula? ✓
+- [ ] Answer format matches question? ✓
+- [ ] Magnitude reasonable? ✓ (Masco significantly outperformed S&P 500)
+
+Answer: 111.97%
+
+--- Extracted Answer ---
+Answer: 111.97%
+Correct: ✗
+================================================================================
+
+【Sample 6】
+Question: what was the percentage change in total rental expense under operating leases from july 2 , 2005 to july 1 , 2006?
+Ground Truth: 7%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage Change** question - asking for the percentage change in total rental expense between two fiscal years.
+
+## STEP 2: Locate the Data
+
+Looking for "total rental expense under operating leases" for the two periods:
+- July 1, 2006 (fiscal 2006)
+- July 2, 2005 (fiscal 2005)
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Total rental expense fiscal 2005 (July 2, 2005) = $92,710,000
+**Data Point 2:** Total rental expense fiscal 2006 (July 1, 2006) = $100,690,000
+
+**Verification:**
+- Time periods correct? ✓ (2005 comes before 2006)
+- Units consistent? ✓ (both in dollars)
+- Values reasonable? ✓ (expense increased, which is typical)
+
+## STEP 4: Choose the Right Formula
+
+For percentage change:
+**Formula:** `((New - Old) / Old) × 100`
+
+Where:
+- Old = 2005 value = $92,710,000
+- New = 2006 value = $100,690,000
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 8.6074857081221
+Rounded (2 decimals): 8.61
+Rounded (1 decimal): 8.6
+**Calculation breakdown:**
+- Change = $100,690,000 - $92,710,000 = $7,980,000
+- Percentage Change = ($7,980,000 / $92,710,000) × 100 = 8.61%
+
+## STEP 6: Format the Answer
+
+The question asks for "percentage change," so the answer should be formatted as a percentage.
+
+Rounding to 2 decimal places: **8.61%**
+
+Answer: 8.61%
+
+--- Extracted Answer ---
+Answer: 8.61%
+Correct: ✗
+================================================================================
+
+【Sample 7】
+Question: what percent of total recourse debt is current?
+Ground Truth: 10%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percentage of total recourse debt is current (due in 2011).
+
+## STEP 2: Locate the Data
+
+Looking at the table:
+- The table shows "annual maturities" for recourse debt
+- Years listed: 2011, 2012, 2013, 2014, 2015, and thereafter
+- Total recourse debt is shown at the bottom
+- "Current" debt typically means debt due within one year, which would be 2011 (since the data is as of December 31, 2010)
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Current debt (2011) = $463 million (from "2011" row)
+Data Point 2: Total recourse debt = $4,612 million (from "total recourse debt" row)
+
+Verification:
+- 2011 represents current year debt? ✓ (as of Dec 31, 2010, debt due in 2011 is current)
+- Both in millions? ✓
+- Values reasonable? ✓ (463 < 4,612)
+```
+
+## STEP 4: Choose the Right Formula
+
+For percentage calculation:
+**Formula: (Part / Total) × 100**
+
+Where:
+- Part = Current debt (2011) = 463
+- Total = Total recourse debt = 4,612
+
+## STEP 5: Calculate
+
+```
+Formula: (Current Debt / Total Recourse Debt) × 100
+Substitution: (463 / 4,612) × 100
+Calculation: 0.10039 × 100 = 10.039%
+Result: 10.04% (rounded to 2 decimal places)
+```
+[Tool: execute_calculation] → Result: 10.039028620988725
+Rounded (2 decimals): 10.04
+Rounded (1 decimal): 10.0
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I should format with the % symbol.
+
+The calculation confirms: **10.04%**
+
+Answer: 10.04%
+
+--- Extracted Answer ---
+Answer: 10.04%
+Correct: ✓
+================================================================================
+
+【Sample 8】
+Question: what percentage of future minimum rental payments are due in 2018?
+Ground Truth: 12%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question asking: "What percentage of total future minimum rental payments are due in 2018?"
+
+## STEP 2: Locate the Data
+
+Looking at the table titled "future minimum rental payments, net of minimum sublease rentals" as of December 2015:
+- I need the payment amount for 2018
+- I need the total future minimum rental payments
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Payments due in 2018 = $301 million (from "2018" row)
+
+**Data Point 2:** Total future minimum rental payments = $2,575 million (from "total" row)
+
+**Verification:**
+- 2018 is included in the total? ✓ (2018 is one of the years listed: 2016-2020 and 2021-thereafter)
+- Both values in same units? ✓ (both in millions)
+- Values reasonable? ✓ (301 < 2,575)
+
+## STEP 4: Choose the Right Formula
+
+For a percentage calculation:
+**Formula:** (Part / Total) × 100
+
+Where:
+- Part = Payments due in 2018 = $301 million
+- Total = Total payments = $2,575 million
+
+## STEP 5: Calculate
+
+**Formula:** (301 / 2,575) × 100
+
+**Calculation:** 
+- 301 ÷ 2,575 = 0.11689...
+- 0.11689 × 100 = 11.689%
+- Rounded to 2 decimal places: 11.69%
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I'll format with the % symbol.
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 11.689320388349515
+Rounded (2 decimals): 11.69
+Rounded (1 decimal): 11.7
+Perfect! The calculation is verified.
+
+**Answer: 11.69%**
+
+--- Extracted Answer ---
+Answer: 11.69%**
+Correct: ✗
+================================================================================
+
+【Sample 9】
+Question: did altria outperform the s&p 500?
+Ground Truth: yes
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Comparison** question asking whether Altria Group Inc. outperformed the S&P 500 index over the five-year period shown.
+
+## STEP 2: Locate the Data
+
+I need to compare the cumulative total shareholder return for:
+- Altria Group Inc. (column 1)
+- S&P 500 (column 3)
+
+The table shows values from December 2011 (baseline of $100) through December 2016 (final values).
+
+## STEP 3: Extract and Verify
+
+**Data Points:**
+- Altria Group Inc. (Dec 2011): $100.00 (baseline)
+- Altria Group Inc. (Dec 2016): $286.61 (final value)
+- S&P 500 (Dec 2011): $100.00 (baseline)
+- S&P 500 (Dec 2016): $198.09 (final value)
+
+**Verification:**
+- Both start at $100 in 2011? ✓
+- Both measured over same time period (2011-2016)? ✓
+- Values are reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+For comparison of performance:
+- Compare final values: Altria ($286.61) vs S&P 500 ($198.09)
+- If Altria > S&P 500, then Altria outperformed
+
+## STEP 5: Calculate
+
+**Comparison:**
+- Altria final value: $286.61
+- S&P 500 final value: $198.09
+- $286.61 > $198.09 ✓
+
+**Additional context:**
+- Altria return: $286.61 - $100 = $186.61 gain (186.61% return)
+- S&P 500 return: $198.09 - $100 = $98.09 gain (98.09% return)
+- Altria outperformed by: $286.61 - $198.09 = $88.52
+
+## STEP 6: Format the Answer
+
+The question asks "did altria outperform the s&p 500?" - this is a yes/no question.
+
+Since Altria's cumulative return ($286.61) is greater than the S&P 500's return ($198.09), the answer is "yes".
+
+Answer: yes
+
+--- Extracted Answer ---
+Answer: yes
+Correct: ✓
+================================================================================
+
+【Sample 10】
+Question: what was the change in unrecognized tax benefits from the end of 2014 to the end of 2015?
+Ground Truth: -35
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is an **Absolute Change** question - asking for the change in unrecognized tax benefits between two time periods (2014 to 2015).
+
+## STEP 2: Locate the Data
+
+Looking at the reconciliation table at the bottom of the data, I need to find the "balance december 31" row for both years:
+- 2015 column
+- 2014 column
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Balance December 31, 2014 = $1,171 million (from "balance december 31" row, "2014" column)
+
+**Data Point 2:** Balance December 31, 2015 = $1,136 million (from "balance december 31" row, "2015" column)
+
+**Verification:**
+- Years correct? ✓ (2014 to 2015)
+- Units consistent? ✓ (both in millions)
+- Numbers reasonable? ✓ (values are close and in expected range)
+
+## STEP 4: Choose the Right Formula
+
+For absolute change: **Change = New - Old**
+
+Where:
+- New = 2015 value = $1,136 million
+- Old = 2014 value = $1,171 million
+
+## STEP 5: Calculate
+
+Formula: Change = New - Old
+Substitution: Change = 1,136 - 1,171
+Calculation: Change = -35
+
+The negative value indicates a decrease.
+
+## STEP 6: Format the Answer
+
+Since the question asks for "the change," I'll provide the value as a plain number. The negative sign indicates a decrease.
+
+Answer: -35
+
+--- Extracted Answer ---
+Answer: -35
+Correct: ✓
+================================================================================
+
+【Sample 11】
+Question: what is the growth rate in the balance of standby letters of credit from 2006 to 2007?
+Ground Truth: -4.4%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **growth rate/percentage change** question. The question asks for the "growth rate" from 2006 to 2007, which means I need to calculate the percentage change.
+
+## STEP 2: Locate the Data
+
+Looking at the table for "standby letters of credit" row:
+- 2007 column
+- 2006 column
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Standby letters of credit 2006 = $4,926 million (from "standby letters of credit" row, "2006" column)
+
+**Data Point 2:** Standby letters of credit 2007 = $4,711 million (from "standby letters of credit" row, "2007" column)
+
+**Verification:**
+- Years correct? ✓ (2006 is the base year, 2007 is the new year)
+- Units consistent? ✓ (both in millions)
+- Values reasonable? ✓ (both in similar range)
+
+## STEP 4: Choose the Right Formula
+
+Since the question asks for "growth rate," I need to use the **percentage change formula**:
+
+**Formula:** `((New - Old) / Old) × 100`
+
+Where:
+- Old = 2006 value = 4,926
+- New = 2007 value = 4,711
+
+## STEP 5: Calculate
+
+**Substitution:** `((4,711 - 4,926) / 4,926) × 100`
+
+**Step-by-step:**
+1. Change = 4,711 - 4,926 = -215
+2. Percentage = (-215 / 4,926) × 100
+3. Percentage = -0.04365 × 100
+4. Percentage = -4.365%
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: -4.364596021112464
+Rounded (2 decimals): -4.36
+Rounded (1 decimal): -4.4
+## STEP 6: Format the Answer
+
+The result is -4.36% (rounded to 2 decimal places). The negative sign indicates a decline/decrease rather than growth.
+
+Since the question asks for "growth rate," and the value decreased, the growth rate is negative.
+
+**Answer:** -4.36%
+
+--- Extracted Answer ---
+Answer: ** -4.36%
+Correct: ✗
+================================================================================
+
+【Sample 12】
+Question: what is the debt-to-asset ratio?
+Ground Truth: 22.4%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **ratio calculation** question. The debt-to-asset ratio is calculated as: Total Debt / Total Assets.
+
+## STEP 2: Locate the Data
+
+I need to identify:
+- Total debt (including current maturities)
+- Total assets
+
+Looking at the table, I can see data for multiple years (2012-2016). Since the question doesn't specify a year, I should calculate the ratio for all available years or clarify which year is needed. However, typically when not specified, the most recent year is used.
+
+## STEP 3: Extract and Verify
+
+For **December 31, 2016** (most recent):
+- Total debt including current maturities = $817,388 thousand
+- Total assets = $3,644,331 thousand
+
+For **December 31, 2015**:
+- Total debt including current maturities = $666,070 thousand
+- Total assets = $2,865,970 thousand
+
+For **December 31, 2014**:
+- Total debt including current maturities = $281,546 thousand
+- Total assets = $2,092,428 thousand
+
+For **December 31, 2013**:
+- Total debt including current maturities = $151,551 thousand
+- Total assets = $1,576,369 thousand
+
+For **December 31, 2012**:
+- Total debt including current maturities = $59,858 thousand
+- Total assets = $1,155,052 thousand
+
+**Verification:**
+- Units consistent? ✓ (all in thousands)
+- Values reasonable? ✓ (debt is less than total assets in all cases)
+
+## STEP 4: Choose the Right Formula
+
+**Formula:** Debt-to-Asset Ratio = Total Debt / Total Assets
+
+## STEP 5: Calculate
+
+Since the question asks for "the" debt-to-asset ratio without specifying a year, I'll calculate for the most recent year (2016):
+
+**For 2016:**
+- Ratio = 817,388 / 3,644,331
+- Ratio = 0.2243 (or 22.43%)
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 0.22429027440152938
+Rounded (2 decimals): 0.22
+Rounded (1 decimal): 0.2
+## STEP 6: Format the Answer
+
+The debt-to-asset ratio is typically expressed as a decimal. The calculation gives us 0.22 (rounded to 2 decimal places) or 0.224 (rounded to 3 decimal places).
+
+**Answer:** 0.22
+
+--- Extracted Answer ---
+Answer: ** 0.22
+Correct: ✓
+================================================================================
+
+【Sample 13】
+Question: what portion of the total noncancelable future lease commitments are due in fiscal year of 2019?
+Ground Truth: 24.6%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what portion (percentage) of the total noncancelable future lease commitments are due in fiscal 2019.
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need:
+- Total noncancelable future lease commitments
+- Amount due in fiscal 2019
+
+The table shows both operating leases and capital leases.
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Fiscal 2019 commitments
+- Operating leases 2019 = $137.4 million
+- Capital leases 2019 = $0.3 million
+- **Total 2019 = $137.4 + $0.3 = $137.7 million**
+
+**Data Point 2:** Total noncancelable future lease commitments
+- Operating leases total = $559.3 million (from "total noncancelable future lease commitments" row)
+- Capital leases total = $0.5 million (from "total noncancelable future lease commitments" row)
+- **Total commitments = $559.3 + $0.5 = $559.8 million**
+
+**Verification:**
+- Units consistent? ✓ (all in millions)
+- Values reasonable? ✓ (2019 is less than total)
+- Correct rows? ✓ (fiscal 2019 row and total row)
+
+## STEP 4: Choose the Right Formula
+
+Since the question asks for "what portion," this is a percentage calculation:
+
+**Formula:** (Part / Total) × 100
+
+Where:
+- Part = Fiscal 2019 commitments = $137.7 million
+- Total = Total commitments = $559.8 million
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 24.59807073954984
+Rounded (2 decimals): 24.6
+Rounded (1 decimal): 24.6
+**Calculation:**
+- Formula: (137.7 / 559.8) × 100
+- Result: 24.60%
+
+## STEP 6: Format the Answer
+
+The question asks for "what portion," which typically expects a percentage or decimal ratio. Given the context, I'll express this as a percentage rounded to 2 decimal places.
+
+**Self-Check:**
+- [ ] Correct time period? ✓ (fiscal 2019)
+- [ ] Units consistent? ✓ (both in millions)
+- [ ] Correct formula? ✓ (percentage calculation)
+- [ ] Reasonable magnitude? ✓ (24.6% is reasonable for one year out of multiple years)
+- [ ] Included both operating and capital leases? ✓
+
+Answer: 24.6%
+
+--- Extracted Answer ---
+Answer: 24.6%
+Correct: ✓
+================================================================================
+
+【Sample 14】
+Question: was the five year total return of the 2019 peer group greater than the 2018 peer group?
+Ground Truth: no
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Comparison** question asking whether one value is greater than another.
+- Specifically: Is the 5-year total return of 2019 peer group > 2018 peer group?
+
+## STEP 2: Locate the Data
+
+I need to find the 5-year total return for both peer groups. Looking at the table:
+- The data spans from 2014 (baseline = 100.00) to 2019 (end of 5-year period)
+- The 5-year total return is represented by the final value in 2019
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** 2019 Peer Group (2019 value) = 281.09
+- Location: "2019 peer group" row, "2019" column
+- This represents the cumulative return starting from 100.00 in 2014
+
+**Data Point 2:** 2018 Peer Group (2019 value) = 286.22
+- Location: "2018 peer group" row, "2019" column  
+- This represents the cumulative return starting from 100.00 in 2014
+
+**Verification:**
+- Both values are from the 2019 column (end of 5-year period)? ✓
+- Both started at 100.00 in 2014? ✓
+- Values are in reasonable range? ✓
+- Units are consistent (index values)? ✓
+
+## STEP 4: Choose the Right Formula
+
+This is a simple comparison:
+- Compare: 281.09 vs 286.22
+- Determine: Is 281.09 > 286.22?
+
+## STEP 5: Calculate
+
+Comparison: 281.09 vs 286.22
+
+281.09 < 286.22
+
+Therefore, the 2019 peer group total return (281.09) is **NOT** greater than the 2018 peer group total return (286.22).
+
+## STEP 6: Format the Answer
+
+The question asks a yes/no question, so the answer should be "yes" or "no".
+
+Since 281.09 is less than 286.22, the answer is "no".
+
+Answer: no
+
+--- Extracted Answer ---
+Answer: no
+Correct: ✓
+================================================================================
+
+【Sample 15】
+Question: what was the percentage change in deferred tax assets and regulatory assets from 2013 to 2014
+Ground Truth: 1.7%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage change** question asking for the change in deferred tax assets and regulatory assets from 2013 to 2014.
+
+## STEP 2: Locate the Data
+
+Scanning the text for information about deferred tax assets and regulatory assets related to 2013 and 2014...
+
+Found in the paragraph about PPACA:
+- "...recorded a reduction in deferred tax assets and an increase in its regulatory assets amounting to $ 6348 and $ 6241 at december 31 , 2014 and 2013 , respectively."
+
+## STEP 3: Extract and Verify
+
+Let me carefully parse this statement:
+- The amounts "$6348 and $6241" correspond to "december 31, 2014 and 2013, respectively"
+
+**Data Point 1:** Deferred tax assets and regulatory assets at December 31, 2013 = $6,241
+**Data Point 2:** Deferred tax assets and regulatory assets at December 31, 2014 = $6,348
+
+**Verification:**
+- Years correct? ✓ (2013 is the old value, 2014 is the new value)
+- Units consistent? ✓ (both in dollars)
+- Values reasonable? ✓ (similar magnitude, slight increase)
+
+## STEP 4: Choose the Right Formula
+
+For percentage change:
+**Formula:** ((New - Old) / Old) × 100
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 1.7144688351225765
+Rounded (2 decimals): 1.71
+Rounded (1 decimal): 1.7
+**Calculation:**
+- Change = 6,348 - 6,241 = 107
+- Percentage Change = (107 / 6,241) × 100 = 1.71%
+
+## STEP 6: Format the Answer
+
+The question asks for "percentage change," so the answer should be formatted as a percentage.
+
+Rounding to 2 decimal places: **1.71%**
+
+Answer: 1.71%
+
+--- Extracted Answer ---
+Answer: 1.71%
+Correct: ✗
+================================================================================
+
+【Sample 16】
+Question: what was the average net annual change in discounted future net cash flows ( in millions ) for the years 2011 , 2010 , and 2009?
+Ground Truth: 3298
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is an **average calculation** question. I need to find the average of the "net change for the year" across three years (2011, 2010, and 2009).
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need to find the row labeled "net change for the year" and extract values for all three years.
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Net change 2011 = $4,648 million (from "net change for the year" row, "2011" column)
+Data Point 2: Net change 2010 = $3,625 million (from "net change for the year" row, "2010" column)
+Data Point 3: Net change 2009 = $1,620 million (from "net change for the year" row, "2009" column)
+
+Verification:
+- All three years present? ✓
+- All in millions? ✓
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For an average calculation:
+**Formula: Average = (Sum of all values) / (Number of values)**
+
+## STEP 5: Calculate
+
+```
+Formula: Average = (2011 value + 2010 value + 2009 value) / 3
+Substitution: Average = (4,648 + 3,625 + 1,620) / 3
+Calculation: 
+  Step 1: Sum = 4,648 + 3,625 + 1,620 = 9,893
+  Step 2: Average = 9,893 / 3 = 3,297.67
+Result: 3,297.67 million
+```
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 3297.6666666666665
+Rounded (2 decimals): 3297.67
+Rounded (1 decimal): 3297.7
+## STEP 6: Format the Answer
+
+The question asks for the average in millions, and based on financial reporting standards, I'll round to a reasonable precision.
+
+**Answer: 3297.67**
+
+--- Extracted Answer ---
+Answer: 3297.67**
+Correct: ✗
+================================================================================
+
+【Sample 17】
+Question: assuming each continent has the same number of destinations , approximately how many destinations does each continent have?
+Ground Truth: 65
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **division/calculation** question. I need to divide the total number of destinations by the number of continents.
+
+## STEP 2: Locate the Data
+
+Scanning the text for relevant information:
+- **Total destinations**: "worldwide itineraries that call on approximately 455 destinations"
+- **Number of continents**: "on all seven continents"
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Total destinations = 455
+Data Point 2: Number of continents = 7
+
+Verification:
+- Both values clearly stated in the text? ✓
+- Question assumes equal distribution? ✓
+- Numbers reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+Since the question asks to divide destinations equally among continents:
+
+**Formula**: Destinations per continent = Total destinations ÷ Number of continents
+
+## STEP 5: Calculate
+
+```
+Formula: 455 ÷ 7
+Calculation: 455 / 7 = 65
+Result: 65 destinations per continent
+```
+[Tool: execute_calculation] → Result: 65.0
+Rounded (2 decimals): 65.0
+Rounded (1 decimal): 65.0
+## STEP 6: Format the Answer
+
+The question asks for "approximately how many destinations" so a whole number is appropriate.
+
+**Answer: 65**
+
+--- Extracted Answer ---
+Answer: 65**
+Correct: ✓
+================================================================================
+
+【Sample 18】
+Question: what was the average net revenue between 2016 and 2017 in millions
+Ground Truth: 704.25
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **simple average calculation** - I need to find the average of net revenue across two years (2016 and 2017).
+
+## STEP 2: Locate the Data
+
+Looking at the table provided, I can find:
+- Net revenue for 2016
+- Net revenue for 2017
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Net Revenue 2016 = $705.4 million (from "2016 net revenue" row)
+Data Point 2: Net Revenue 2017 = $703.1 million (from "2017 net revenue" row)
+
+Verification:
+- Both values are in millions? ✓
+- Values are reasonable? ✓
+- Both data points clearly labeled? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For calculating an average of two values:
+**Formula: Average = (Value₁ + Value₂) / 2**
+
+## STEP 5: Calculate
+
+```
+Formula: Average = (2016 Net Revenue + 2017 Net Revenue) / 2
+Substitution: Average = (705.4 + 703.1) / 2
+Calculation: Average = 1,408.5 / 2 = 704.25
+Result: 704.25 million
+```
+
+## STEP 6: Format the Answer
+
+The question asks for "average net revenue...in millions", so the answer should be a plain number representing millions.
+
+Answer: 704.25
+
+--- Extracted Answer ---
+Answer: 704.25
+Correct: ✓
+================================================================================
+
+【Sample 19】
+Question: the combined amount of accrued interest and penalties related to tax positions taken on our tax returns and included in non-current income taxes payable was what percent of the total ending balance as of november 28 2008?
+Ground Truth: 11.0%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percent the "combined amount of accrued interest and penalties related to tax positions" represents of the "total ending balance as of November 28, 2008."
+
+## STEP 2: Locate the Data
+
+Looking at the provided table:
+- **Ending balance as of November 28, 2008**: $139,549 (clearly stated in the last row)
+- **Combined amount of accrued interest and penalties**: This is NOT provided in the table
+
+## STEP 3: Extract and Verify
+
+**Issue identified**: The question asks about "the combined amount of accrued interest and penalties related to tax positions taken on our tax returns and included in non-current income taxes payable," but this value is not present in the provided data table.
+
+The table shows:
+- Beginning balance: $201,808
+- Various increases and decreases during the year
+- Ending balance: $139,549
+
+However, there is **no mention of accrued interest and penalties** in the provided data.
+
+## STEP 4: Analysis
+
+Without the actual dollar amount of accrued interest and penalties, I cannot calculate the percentage. The formula would be:
+
+**Formula**: (Accrued Interest and Penalties / Ending Balance) × 100
+
+Where:
+- Ending Balance = $139,549 ✓ (available)
+- Accrued Interest and Penalties = ??? ✗ (NOT provided)
+
+## Conclusion
+
+The data provided is **insufficient** to answer this question. The table shows the reconciliation of unrecognized tax benefits but does not include information about accrued interest and penalties related to tax positions.
+
+To answer this question, I would need additional information stating the dollar amount of "accrued interest and penalties related to tax positions taken on our tax returns and included in non-current income taxes payable" as of November 28, 2008.
+
+Answer: Cannot be determined from the provided data. The amount of accrued interest and penalties is not included in the table.
+
+--- Extracted Answer ---
+Answer: Cannot be determined from the provided data. The amount of accrued interest and penalties is not included in the table.
+Correct: ✓
+================================================================================
+
+【Sample 20】
+Question: in 2010 and 2009 , what was the total fair value in billions of assets segregated for the benefit of securities and futures brokerage customers?
+Ground Truth: 68.9
+
+--- Full Reasoning Process ---
+I need to find information about the fair value of assets segregated for the benefit of securities and futures brokerage customers for 2010 and 2009.
+
+Let me analyze the provided data:
+
+**STEP 1: Understand the Question Type**
+This is asking for a total/sum of fair values across two years (2010 and 2009) for a specific category of assets.
+
+**STEP 2: Locate the Data**
+Looking at the provided table, I can see:
+- The table shows "income before income tax expense/(benefit) and extraordinary gain"
+- It breaks down U.S. and non-U.S. components
+- Years covered: 2010, 2009, 2008
+
+**STEP 3: Extract and Verify**
+❌ **Problem identified:** The table provided does NOT contain information about "assets segregated for the benefit of securities and futures brokerage customers."
+
+The table only shows:
+- U.S. income components
+- Non-U.S. income components  
+- Total income before tax
+
+**STEP 4: Assessment**
+The question asks about "fair value of assets segregated for securities and futures brokerage customers" but the data provided only contains income statement information (income before tax). These are completely different financial metrics:
+- The question asks about **balance sheet items** (assets)
+- The data shows **income statement items** (income before tax)
+
+**Conclusion:**
+The information needed to answer this question is NOT present in the provided data table. The table discusses income components, not segregated customer assets. To answer this question, I would need access to additional data that specifically shows the fair value of assets segregated for brokerage customers.
+
+Answer: The data provided does not contain information about assets segregated for the benefit of securities and futures brokerage customers. The table only shows income before tax components, which is unrelated to the segregated assets figure requested in the question.
+
+--- Extracted Answer ---
+Answer: The data provided does not contain information about assets segregated for the benefit of securities and futures brokerage customers. The table only shows income before tax components, which is unrelated to the segregated assets figure requested in the question.
+Correct: ✓
+================================================================================
+
+【Sample 21】
+Question: what was the percentage change in the commercial mortgage loans designated for sale at fair value from 2008 to 2009
+Ground Truth: -8.4%
+
+--- Full Reasoning Process ---
+I need to analyze this question carefully using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+The question asks for "percentage change in the commercial mortgage loans designated for sale at fair value from 2008 to 2009"
+
+This is a **Percentage Change** question.
+
+## STEP 2: Locate the Data
+
+Looking at the provided data, I see Table 15 titled "loans held for sale" with data for:
+- December 31, 2012
+- December 31, 2011
+
+The question asks for data from **2008 to 2009**, but the table only shows **2012 and 2011**.
+
+## STEP 3: Extract and Verify
+
+**Critical Issue Identified:**
+- Question asks for: 2008 to 2009 data
+- Table provides: 2012 and 2011 data
+- Data Point needed: "commercial mortgages at fair value" for 2008 and 2009
+- Available data: "commercial mortgages at fair value" = $772M (2012) and $843M (2011)
+
+**Verification:**
+- Years requested (2008, 2009) are NOT in the table ✗
+- The data provided does not contain the years needed to answer this question
+
+## STEP 4: Assessment
+
+The question cannot be answered with the provided data because:
+1. The table only contains data for December 31, 2012 and December 31, 2011
+2. The question specifically asks about 2008 to 2009
+3. There is no 2008 or 2009 data in the provided information
+
+This appears to be either:
+- A mismatch between the question and the data provided, OR
+- The question may have an error (perhaps it should ask about 2011 to 2012?)
+
+If I were to assume the question meant to ask about 2011 to 2012 (the years actually in the table), I could calculate:
+- Commercial mortgages at fair value 2011 = $843M
+- Commercial mortgages at fair value 2012 = $772M
+- Percentage change = ((772 - 843) / 843) × 100 = -8.42%
+
+However, I cannot answer the question as written because the required data for 2008 and 2009 is not provided.
+
+Answer: Cannot be determined from the provided data. The table only contains data for 2012 and 2011, while the question asks for 2008 to 2009 data.
+
+--- Extracted Answer ---
+Answer: Cannot be determined from the provided data. The table only contains data for 2012 and 2011, while the question asks for 2008 to 2009 data.
+Correct: ✓
+================================================================================
+
+【Sample 22】
+Question: what was the difference in percentage cumulative 5-year total shareholder return on common stock fidelity national information services , inc . compared to the s&p 500 for the period ending 12/16?
+Ground Truth: 113.63%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is asking for the **difference in percentage returns** between two investments over a 5-year period (12/11 to 12/16).
+
+## STEP 2: Locate the Data
+
+I need to find:
+- Fidelity National Information Services Inc. return for 12/16
+- S&P 500 return for 12/16
+
+Both started at 100.00 in 12/11 (baseline).
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Fidelity National Information Services Inc. (12/16) = 311.81
+- This represents a $100 investment grew to $311.81
+
+**Data Point 2:** S&P 500 (12/16) = 198.18
+- This represents a $100 investment grew to $198.18
+
+**Verification:**
+- Both start from 100.00 baseline in 12/11? ✓
+- Both measured at 12/16? ✓
+- Values reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+Since both values represent cumulative returns from a $100 baseline:
+- Fidelity return = 311.81 - 100 = 211.81%
+- S&P 500 return = 198.18 - 100 = 98.18%
+
+**Difference = Fidelity return - S&P 500 return**
+
+Or more directly:
+**Difference = 311.81 - 198.18 = 113.63 percentage points**
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 113.63
+Rounded (2 decimals): 113.63
+Rounded (1 decimal): 113.6
+**Calculation:**
+- Difference = 311.81 - 198.18 = 113.63
+
+This means Fidelity National Information Services outperformed the S&P 500 by 113.63 percentage points over the 5-year period.
+
+## STEP 6: Format the Answer
+
+The question asks for "difference in percentage" so the answer should be expressed as a percentage point difference.
+
+Answer: 113.63%
+
+--- Extracted Answer ---
+Answer: 113.63%
+Correct: ✓
+================================================================================
+
+【Sample 23】
+Question: for the quarter ended march 312015 what was the percentage change in the share price from the highest to the lowest
+Ground Truth: 9.3%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage change** question - asking for the percentage change from the highest price to the lowest price during Q1 2015.
+
+## STEP 2: Locate the Data
+
+Looking at the table for "quarter ended march 31" in the 2015 section:
+- Need the "high" and "low" columns for Q1 2015
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: High price Q1 2015 = $101.88 (from "quarter ended march 31" row, "high" column, 2015 section)
+Data Point 2: Low price Q1 2015 = $93.21 (from "quarter ended march 31" row, "low" column, 2015 section)
+
+Verification:
+- Correct quarter (March 31, 2015)? ✓
+- High > Low (101.88 > 93.21)? ✓
+- Both in same units (dollars)? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For percentage change from highest to lowest:
+**Formula: ((New - Old) / Old) × 100**
+
+In this case:
+- Old (starting point) = High price = $101.88
+- New (ending point) = Low price = $93.21
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: -8.510011778563017
+Rounded (2 decimals): -8.51
+Rounded (1 decimal): -8.5
+```
+Formula: Percentage Change = ((Low - High) / High) × 100
+Substitution: ((93.21 - 101.88) / 101.88) × 100
+Calculation: (-8.67 / 101.88) × 100
+Result: -8.51%
+```
+
+## STEP 6: Format the Answer
+
+The question asks for "percentage change" so the answer should include the % symbol. The negative sign indicates a decrease from high to low, which makes sense.
+
+**Self-Check:**
+- [ ] Correct time period (Q1 2015)? ✓
+- [ ] Units consistent? ✓
+- [ ] Correct formula (percentage change)? ✓
+- [ ] Reasonable magnitude? ✓ (about 8.5% decrease)
+- [ ] Proper format? ✓
+
+Answer: -8.51%
+
+--- Extracted Answer ---
+Answer: -8.51%
+Correct: ✗
+================================================================================
+
+【Sample 24】
+Question: of the total contractual obligations and off-balance sheet arrangements contractual obligations what percentage is due to capital lease obligations?
+Ground Truth: 2%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage calculation** question asking: "What percentage of total contractual obligations is due to capital lease obligations?"
+
+## STEP 2: Locate the Data
+
+I need to find:
+1. Total contractual obligations
+2. Capital lease obligations
+
+Looking at the table at the bottom of the data.
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Total contractual obligations = $13,208 million (from "total contractual obligations" row, "total" column)
+
+**Data Point 2:** Capital lease obligations = $230 million (from "capital lease obligations (1)" row, "total" column)
+
+**Verification:**
+- Both values are from the "total" column? ✓
+- Both in millions? ✓
+- Values are reasonable? ✓
+- Capital lease obligations ($230M) is less than total ($13,208M)? ✓
+
+## STEP 4: Choose the Right Formula
+
+For a percentage calculation:
+**Formula:** (Part / Total) × 100
+
+Where:
+- Part = Capital lease obligations = $230 million
+- Total = Total contractual obligations = $13,208 million
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 1.7413688673531194
+Rounded (2 decimals): 1.74
+Rounded (1 decimal): 1.7
+**Formula:** (Part / Total) × 100
+**Substitution:** (230 / 13,208) × 100
+**Calculation:** 1.74%
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I'll format with the % symbol.
+
+Rounding to 2 decimal places: **1.74%**
+
+Answer: 1.74%
+
+--- Extracted Answer ---
+Answer: 1.74%
+Correct: ✗
+================================================================================
+
+【Sample 25】
+Question: what is the ratio of the total flight attendants to total maintenance personnel
+Ground Truth: 1.6
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Ratio** question - asking for the ratio of one value to another.
+
+## STEP 2: Locate the Data
+
+I need to find:
+- Total flight attendants
+- Total maintenance personnel
+
+Looking at the table, I can see there's a "total" column on the right side.
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Total flight attendants = 26,900 (from "flight attendants" row, "total" column)
+
+**Data Point 2:** Total maintenance personnel = 16,900 (from "maintenance personnel" row, "total" column)
+
+**Verification:**
+- Both values are from the "total" column? ✓
+- Values are in the same units (number of employees)? ✓
+- Numbers are reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+For a ratio question: **Ratio = Value A / Value B**
+
+In this case: **Ratio = Total flight attendants / Total maintenance personnel**
+
+## STEP 5: Calculate
+
+Formula: Total flight attendants / Total maintenance personnel
+
+Substitution: 26,900 / 16,900
+
+Let me calculate this:
+[Tool: execute_calculation] → Result: 1.5917159763313609
+Rounded (2 decimals): 1.59
+Rounded (1 decimal): 1.6
+Calculation: 26,900 / 16,900 = 1.59 (rounded to 2 decimal places)
+
+## STEP 6: Format the Answer
+
+Since the question asks for a "ratio," I should provide it as a decimal number. The result is approximately 1.59.
+
+Answer: 1.59
+
+--- Extracted Answer ---
+Answer: 1.59
+Correct: ✓
+================================================================================
+
+【Sample 26】
+Question: as of december 2007 what was the ratio of the square footage in alpharetta georgia to charlotte north carolina
+Ground Truth: 2.64
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Ratio** question - asking for the ratio of square footage between two locations.
+
+## STEP 2: Locate the Data
+
+I need to find:
+- Square footage for Alpharetta, Georgia
+- Square footage for Charlotte, North Carolina
+
+Looking at the table with location and approximate square footage data.
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Alpharetta Georgia = 219,000 square feet (from "alpharetta georgia" row)
+
+**Data Point 2:** Charlotte North Carolina = 83,000 square feet (from "charlotte north carolina" row)
+
+**Verification:**
+- Both locations found in table? ✓
+- Both in same units (square feet)? ✓
+- Values reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+For a ratio calculation:
+**Formula:** Ratio = Value A / Value B
+
+In this case: Ratio = Alpharetta square footage / Charlotte square footage
+
+## STEP 5: Calculate
+
+**Formula:** Ratio = 219,000 / 83,000
+
+**Calculation:** 
+Let me compute this:
+[Tool: execute_calculation] → Result: 2.63855421686747
+Rounded (2 decimals): 2.64
+Rounded (1 decimal): 2.6
+**Result:** 2.64 (rounded to 2 decimal places)
+
+## STEP 6: Format the Answer
+
+Since the question asks for a "ratio," the answer should be expressed as a decimal number.
+
+The ratio is approximately 2.64, meaning Alpharetta's square footage is about 2.64 times that of Charlotte's.
+
+Answer: 2.64
+
+--- Extracted Answer ---
+Answer: 2.64
+Correct: ✓
+================================================================================
+
+【Sample 27】
+Question: in 2010 what was the percent of the income tax benefit to the stock based compensation cost
+Ground Truth: 34.8%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percentage the income tax benefit represents of the share-based compensation cost for 2010.
+
+## STEP 2: Locate the Data
+
+Looking at the table at the bottom of the document, I need:
+- Share-based compensation cost for 2010
+- Income tax benefit for 2010
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Share-based compensation cost 2010 = $18.1 million (from "share-based compensation cost" row, "2010" column)
+Data Point 2: Income tax benefit 2010 = $6.3 million (from "income tax benefit" row, "2010" column - shown as -6.3, but the negative indicates it's a benefit/reduction)
+
+Verification:
+- Both values from 2010 column? ✓
+- Units consistent (both in millions)? ✓
+- Values reasonable? ✓
+```
+
+Note: The income tax benefit is shown as -6.3 in the table, but for the percentage calculation, I'll use the absolute value of 6.3.
+
+## STEP 4: Choose the Right Formula
+
+For a percentage calculation:
+**Formula: (Part / Total) × 100**
+
+In this case:
+- Part = Income tax benefit = 6.3
+- Total = Share-based compensation cost = 18.1
+
+## STEP 5: Calculate
+
+```
+Formula: (Income tax benefit / Share-based compensation cost) × 100
+Substitution: (6.3 / 18.1) × 100
+Calculation: 0.3481... × 100 = 34.81%
+Result: 34.81% (or approximately 35%)
+```
+[Tool: execute_calculation] → Result: 34.80662983425414
+Rounded (2 decimals): 34.81
+Rounded (1 decimal): 34.8
+## STEP 6: Format the Answer
+
+The question asks for "the percent," so I should format as a percentage.
+
+The calculation confirms: 34.81%
+
+Answer: 34.81%
+
+--- Extracted Answer ---
+Answer: 34.81%
+Correct: ✓
+================================================================================
+
+【Sample 28】
+Question: what is the percentage change in the the gross liability for unrecognized tax benefits during 2008 compare to 2007?
+Ground Truth: -30.9%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage Change** question - asking for the percentage change in gross liability for unrecognized tax benefits from 2007 to 2008.
+
+## STEP 2: Locate the Data
+
+Looking at the table showing FIN 48 changes during fiscal 2008:
+- Beginning balance (as of December 1, 2007)
+- Ending balance (as of November 28, 2008)
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Beginning balance (2007) = $201,808 (from "beginning balance as of december 1 2007" row)
+
+**Data Point 2:** Ending balance (2008) = $139,549 (from "ending balance as of november 28 2008" row)
+
+**Verification:**
+- 2007 comes before 2008? ✓
+- Both in same units (dollars)? ✓
+- Values reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+For percentage change:
+**Formula:** `((New - Old) / Old) × 100`
+
+Where:
+- Old = 2007 value = $201,808
+- New = 2008 value = $139,549
+
+## STEP 5: Calculate
+
+Let me use the calculation tool to ensure precision:
+[Tool: execute_calculation] → Result: -30.8506104812495
+Rounded (2 decimals): -30.85
+Rounded (1 decimal): -30.9
+**Calculation breakdown:**
+- Change = 139,549 - 201,808 = -62,259
+- Percentage Change = (-62,259 / 201,808) × 100 = -30.85%
+
+The negative sign indicates a **decrease** in the gross liability for unrecognized tax benefits.
+
+## STEP 6: Format the Answer
+
+The question asks for "percentage change," so the answer should be formatted as a percentage. Given the precision of the calculation, I'll round to 2 decimal places.
+
+**Answer: -30.85%**
+
+--- Extracted Answer ---
+Answer: -30.85%**
+Correct: ✗
+================================================================================
+
+【Sample 29】
+Question: what was the total impairment costs recorded from 2003 to 2005 in millions
+Ground Truth: 5.8
+
+--- Full Reasoning Process ---
+I need to find the total impairment costs recorded from 2003 to 2005.
+
+Let me carefully read through the provided data to locate information about impairment costs.
+
+**STEP 1: Understand the Question**
+- Question Type: Sum/Total calculation
+- Looking for: Total impairment costs across 3 years (2003, 2004, 2005)
+
+**STEP 2: Locate the Data**
+
+Scanning through the provided text, I'm looking for any mention of "impairment" or "impairment costs"...
+
+Reading through the data:
+- Information about available-for-sale securities
+- Merchandise inventories details
+- LIFO reserves changes
+- Store pre-opening costs
+- Property and equipment depreciation
+
+**STEP 3: Extract and Verify**
+
+After carefully reading through the entire provided data, I cannot find any mention of impairment costs. The data includes:
+- Realized gains/losses on securities (not material)
+- LIFO cost information ($5.8M and $6.3M)
+- LIFO reserve changes (-$0.5M in 2005, -$0.2M in 2004, +$0.7M in 2003)
+- Gross profit adjustment ($5.2M)
+- Depreciation useful lives
+
+There is **no information about impairment costs** in the provided data.
+
+**Conclusion:**
+
+The provided financial statement notes do not contain any information about impairment costs for the years 2003, 2004, or 2005. Without this data, I cannot calculate the total impairment costs.
+
+Answer: The data provided does not contain information about impairment costs for 2003-2005, so this cannot be calculated from the given information.
+
+--- Extracted Answer ---
+Answer: The data provided does not contain information about impairment costs for 2003-2005, so this cannot be calculated from the given information.
+Correct: ✓
+================================================================================
+
+【Sample 30】
+Question: what is the borrowing under the term loan facility as a percentage of the total contractual maturities of long-term debt obligations due subsequent to december 31 , 2016?
+Ground Truth: 114%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percentage the term loan facility represents of the total contractual maturities.
+
+## STEP 2: Locate the Data
+
+From the text:
+- "At december 31, 2016, we had $3081 outstanding on the term loan"
+
+From the table showing contractual maturities:
+- 2017: $0 (shown as 2014, which appears to be a formatting issue meaning $0)
+- 2018: $150
+- 2019: $175
+- 2020: $2756
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Term loan facility outstanding = $3,081 million (as of December 31, 2016)
+
+**Data Point 2:** Total contractual maturities need to be calculated:
+- 2017: $0
+- 2018: $150
+- 2019: $175
+- 2020: $2,756
+- Total = $0 + $150 + $175 + $2,756 = $3,081 million
+
+**Verification:**
+- The term loan outstanding ($3,081) equals the total maturities ($3,081) ✓
+- This makes sense as the term loan IS the long-term debt being measured ✓
+- Units are consistent (all in millions) ✓
+
+## STEP 4: Choose the Right Formula
+
+Formula: **Percentage = (Part / Total) × 100**
+
+In this case:
+- Part = Term loan facility = $3,081
+- Total = Total contractual maturities = $3,081
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 100.0
+Rounded (2 decimals): 100.0
+Rounded (1 decimal): 100.0
+Formula: (3,081 / 3,081) × 100
+Calculation: 1.0 × 100 = 100%
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so the answer should be formatted as "100%"
+
+## Self-Check
+
+- [✓] Used data from correct time period (December 31, 2016)
+- [✓] Units are consistent (all in millions)
+- [✓] Applied correct formula (percentage calculation)
+- [✓] Answer format matches question expectation (percentage)
+- [✓] Magnitude is reasonable (100% makes sense since the term loan represents all the debt maturities)
+- [✓] Double-checked that the maturities table represents the term loan payments
+
+Answer: 100%
+
+--- Extracted Answer ---
+Answer: 100%
+Correct: ✓
+================================================================================
+
+【Sample 31】
+Question: in 2015 what was the percent of the total operating revenues associated with agriculture products
+Ground Truth: 16.4%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage calculation** question asking: "What percentage of total operating revenues came from agricultural products in 2015?"
+
+## STEP 2: Locate the Data
+
+I need to find:
+1. Agricultural products revenue in 2015
+2. Total operating revenues in 2015
+
+Scanning the table...
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Agricultural products 2015 = $3,581 million (from "agricultural products" row, "2015" column)
+
+**Data Point 2:** Total operating revenues 2015 = $21,813 million (from "total operating revenues" row, "2015" column)
+
+**Verification:**
+- Correct year (2015)? ✓
+- Both in millions? ✓
+- Values reasonable? ✓ (agricultural products is less than total)
+
+## STEP 4: Choose the Right Formula
+
+For percentage calculation:
+**Formula: (Part / Total) × 100**
+
+Where:
+- Part = Agricultural products revenue
+- Total = Total operating revenues
+
+## STEP 5: Calculate
+
+Formula: (Agricultural Products / Total Operating Revenues) × 100
+
+Substitution: (3,581 / 21,813) × 100
+[Tool: execute_calculation] → Result: 16.416815660386007
+Rounded (2 decimals): 16.42
+Rounded (1 decimal): 16.4
+Calculation: (3,581 / 21,813) × 100 = 16.42%
+
+## STEP 6: Format the Answer
+
+The question asks for "the percent," so I should format as a percentage.
+
+Rounding to 2 decimal places: **16.42%**
+
+Answer: 16.42%
+
+--- Extracted Answer ---
+Answer: 16.42%
+Correct: ✓
+================================================================================
+
+【Sample 32】
+Question: what percent of net interest revenue where total operating expenses in 2009?
+Ground Truth: 28%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question asking: "What percent of net interest revenue were total operating expenses in 2009?"
+
+This means: (Total Operating Expenses / Net Interest Revenue) × 100
+
+## STEP 2: Locate the Data
+
+I need to find two values from the 2009 column:
+1. Net interest revenue for 2009
+2. Total operating expenses for 2009
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Net interest revenue 2009 = $3,173 million (from "net interest revenue" row, "2009" column)
+
+**Data Point 2:** Total operating expenses 2009 = $896 million (from "total operating expenses" row, "2009" column)
+
+**Verification:**
+- Both values from 2009? ✓
+- Both in millions? ✓
+- Values are reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+For "what percent of X is Y":
+**Formula:** (Part / Whole) × 100 = (Total Operating Expenses / Net Interest Revenue) × 100
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 28.238260321462338
+Rounded (2 decimals): 28.24
+Rounded (1 decimal): 28.2
+**Calculation:**
+- Formula: (896 / 3,173) × 100
+- Result: 28.24%
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I'll format as a percentage with appropriate precision.
+
+Answer: 28.24%
+
+--- Extracted Answer ---
+Answer: 28.24%
+Correct: ✓
+================================================================================
+
+【Sample 33】
+Question: what was the greatest provision for income taxes , in millions?
+Ground Truth: 829
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Comparison/Maximum** question - I need to find the greatest (maximum) value among the provision for income taxes across different years.
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need to find the "provision for income taxes" row and compare values across the three years: 2006, 2005, and 2004.
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Provision for income taxes 2006 = $829 million
+Data Point 2: Provision for income taxes 2005 = $480 million  
+Data Point 3: Provision for income taxes 2004 = $104 million
+
+Verification:
+- All values from "provision for income taxes" row? ✓
+- All in millions? ✓
+- Values reasonable and consistent? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+This is a simple comparison to find the maximum value:
+**Maximum = max(Value₂₀₀₆, Value₂₀₀₅, Value₂₀₀₄)**
+
+## STEP 5: Calculate
+
+```
+Comparison:
+- 2006: $829 million
+- 2005: $480 million
+- 2004: $104 million
+
+Maximum value: $829 million (from 2006)
+```
+
+## STEP 6: Format the Answer
+
+The question asks for the value in millions, so the answer should be: **829**
+
+## Self-Check
+- [ ] Used correct row (provision for income taxes)? ✓
+- [ ] Compared all three years? ✓
+- [ ] Identified the maximum correctly? ✓
+- [ ] Format matches expectation (in millions)? ✓
+
+Answer: 829
+
+--- Extracted Answer ---
+Answer: 829
+Correct: ✓
+================================================================================
+
+【Sample 34】
+Question: in 2018 what was the percent of the cib markets net interest income as part of the managed interest income
+Ground Truth: 5.54%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage calculation** question. I need to find what percentage CIB markets net interest income represents of the total managed net interest income in 2018.
+
+## STEP 2: Locate the Data
+
+Looking at the table for year 2018:
+- Net interest income - managed basis (total)
+- CIB markets net interest income (part)
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Net interest income - managed basis (2018) = $55,687 million
+Data Point 2: CIB markets net interest income (2018) = $3,087 million
+
+Verification:
+- Both from 2018? ✓
+- Both in millions? ✓
+- CIB markets is a component of total managed? ✓ (confirmed by the "less:" structure)
+- Numbers reasonable? ✓ (3,087 < 55,687)
+```
+
+## STEP 4: Choose the Right Formula
+
+Since I need to find what percentage the CIB markets portion is of the total:
+
+**Formula: (Part / Total) × 100**
+
+## STEP 5: Calculate
+
+```
+Formula: (CIB markets net interest income / Total managed net interest income) × 100
+Substitution: (3,087 / 55,687) × 100
+Calculation: 0.05543... × 100 = 5.543...%
+Result: 5.54% (rounded to 2 decimal places)
+```
+[Tool: execute_calculation] → Result: 5.543484116580171
+Rounded (2 decimals): 5.54
+Rounded (1 decimal): 5.5
+## STEP 6: Format the Answer
+
+The question asks for "the percent," so I should format as a percentage.
+
+The calculation confirms: 5.54%
+
+Answer: 5.54%
+
+--- Extracted Answer ---
+Answer: 5.54%
+Correct: ✓
+================================================================================
+
+【Sample 35】
+Question: what would the fair value of total securities available for sale be without the fair value of securities classified as corporate stocks as of december 31 , 2012?
+Ground Truth: 61545
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **subtraction/exclusion** question: "What would X be without Y?"
+- X = Fair value of total securities available for sale
+- Y = Fair value of securities classified as corporate stocks
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need to find:
+1. Fair value of total securities available for sale as of December 31, 2012
+2. Fair value of corporate stocks as of December 31, 2012
+
+From the table:
+- Row: "total securities available for sale (a)"
+- Column: "december 31 2012 fair value"
+- Value: $51,052 million
+
+However, I notice there's a footnote "(a)" which typically indicates additional information. The question asks about "corporate stocks" but I don't see a separate line item for corporate stocks in the provided table.
+
+## STEP 3: Extract and Verify
+
+**Issue identified**: The table shows "total securities available for sale" with fair value of $51,052 million, but does not show a breakdown of corporate stocks separately.
+
+Let me check if there's information I'm missing. The question specifically asks about "securities classified as corporate stocks" which should be a component of the total securities available for sale.
+
+**Without the corporate stocks value visible in the provided table, I cannot complete this calculation.**
+
+However, if I assume that the corporate stocks value should be provided elsewhere in the original document (perhaps in a detailed breakdown referenced by footnote (a)), let me demonstrate the approach:
+
+## STEP 4: Choose the Right Formula
+
+Formula: **Total Securities AFS Fair Value - Corporate Stocks Fair Value**
+
+## STEP 5: Calculate
+
+Since the corporate stocks value is not provided in the visible table, I need to make a reasonable assumption. Let me check if there's a standard breakdown or if I should look for additional context.
+
+**Wait** - Let me reconsider. Sometimes in financial documents, corporate stocks might be listed in a separate section or the value might need to be inferred. However, based solely on the table provided, I cannot see the fair value of corporate stocks.
+
+Given that this is a specific question with an expected answer, there must be additional data not shown in the excerpt provided. Let me assume there's a value for corporate stocks that should be available (commonly this would be shown in a detailed breakdown of the securities available for sale).
+
+If I had the corporate stocks fair value, the calculation would be:
+[Tool: generate_calculation_formula] → Unable to auto-generate formula. 
+Data provided: {
+  "total_afs_fair_value": 51052,
+  "corporate_stocks_fair_value": "unknown"
+}
+Please specify the operation type or provide more context.
+Based on the table provided, I can see the total securities available for sale fair value is $51,052 million as of December 31, 2012. However, **the fair value of corporate stocks is not shown in the provided table excerpt**.
+
+To answer this question properly, I would need additional information that breaks down the securities available for sale by type (including corporate stocks). This information is likely referenced by footnote "(a)" but is not included in the data provided.
+
+**If you can provide the fair value of corporate stocks**, the calculation would be:
+- Fair Value without corporate stocks = $51,052 million - [Corporate Stocks Fair Value]
+
+Answer: Unable to determine from the provided data. The table shows total securities available for sale fair value of $51,052 million, but does not include the breakdown showing the fair value of corporate stocks component needed to complete the calculation.
+
+--- Extracted Answer ---
+Answer: Unable to determine from the provided data. The table shows total securities available for sale fair value of $51,052 million, but does not include the breakdown showing the fair value of corporate stocks component needed to complete the calculation.
+Correct: ✗
+================================================================================
+
+【Sample 36】
+Question: assuming the same level of settlements as in fiscal 2007 , what would be the ending balance at march 31 2008 in millions for unrecognized tax benefits?\\n
+Ground Truth: 112
+
+--- Full Reasoning Process ---
+I'll work through this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **hypothetical calculation** question asking: "What would the balance be IF settlements continued at the same level?"
+
+The question asks about settlements, but I need to identify what actually changed in fiscal 2007.
+
+## STEP 2: Locate the Data
+
+From the reconciliation table:
+- Balance at April 1, 2007: $224 thousand
+- Reductions for tax positions for closing of applicable statute of limitations: -$56 thousand
+- Balance at March 31, 2008: $168 thousand
+
+The table shows the actual fiscal 2008 activity. I need to understand what happened in fiscal 2007 to establish the "same level of settlements."
+
+## STEP 3: Extract and Verify
+
+Looking at the data:
+- **Starting balance (April 1, 2007)**: $224 thousand
+- **Reduction during fiscal 2008**: $56 thousand
+- **Ending balance (March 31, 2008)**: $168 thousand
+
+The question asks about "settlements" but the table shows "reductions for tax positions for closing of the applicable statute of limitations" which is $56 thousand.
+
+**Key insight**: The question assumes this $56 thousand reduction represents the "level of settlements" from fiscal 2007, and asks what would happen if we applied another $56 thousand reduction in fiscal 2008.
+
+## STEP 4: Choose the Right Formula
+
+If we assume the same level of reductions ($56 thousand) happens again:
+
+**Formula**: New Balance = Current Ending Balance - Additional Reduction
+**Formula**: New Balance = $168 - $56
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 112
+Calculation: $168 - $56 = $112 thousand
+
+## STEP 6: Format the Answer
+
+The question asks for the answer "in millions", so I need to convert:
+$112 thousand = $0.112 million
+
+However, looking at the context and typical financial reporting, the answer should be expressed as a decimal in millions: **0.112** or rounded to **0.11** million.
+
+Let me verify the conversion:
+[Tool: execute_calculation] → Result: 0.112
+Rounded (2 decimals): 0.11
+Rounded (1 decimal): 0.1
+Answer: 0.112
+
+--- Extracted Answer ---
+Answer: 0.112
+Correct: ✓
+================================================================================
+
+【Sample 37】
+Question: as of december 2012 what is the percent of the square footage not leased to the total square footage in alpharetta , georgia
+Ground Truth: 64.9%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percent of the total square footage in Alpharetta, Georgia is NOT leased (i.e., owned).
+
+## STEP 2: Locate the Data
+
+From the text:
+- "all facilities are leased, **except for 165000 square feet of our office in alpharetta , georgia**"
+
+From the table:
+- Alpharetta Georgia total square footage: **254,000**
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Owned (not leased) space in Alpharetta = 165,000 square feet
+Data Point 2: Total space in Alpharetta = 254,000 square feet
+
+Verification:
+- Both values refer to Alpharetta, Georgia? ✓
+- Units consistent (both in square feet)? ✓
+- Owned space (165,000) < Total space (254,000)? ✓
+- Numbers reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+Since the question asks for "percent of the square footage not leased to the total square footage":
+
+**Formula:** `(Not Leased / Total) × 100`
+
+Where:
+- Not Leased = Owned space = 165,000 sq ft
+- Total = 254,000 sq ft
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 64.96062992125984
+Rounded (2 decimals): 64.96
+Rounded (1 decimal): 65.0
+```
+Formula: (Not Leased / Total) × 100
+Substitution: (165,000 / 254,000) × 100
+Calculation: 0.6496 × 100 = 64.96%
+Result: 64.96%
+```
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I'll format it as a percentage. Rounding to 2 decimal places: **64.96%**
+
+## Self-Check
+- [✓] Used correct data: 165,000 (owned) and 254,000 (total) from Alpharetta
+- [✓] Units consistent: both in square feet
+- [✓] Correct formula: percentage calculation (part/total × 100)
+- [✓] Answer format: percentage with % symbol
+- [✓] Magnitude reasonable: ~65% seems reasonable
+
+Answer: 64.96%
+
+--- Extracted Answer ---
+Answer: 64.96%
+Correct: ✓
+================================================================================
+
+【Sample 38】
+Question: as of december 2007 what was the percent of the square footage in alpharetta georgia not yet leased
+Ground Truth: 75.8%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percent of the Alpharetta, Georgia facility is not yet leased (i.e., owned).
+
+## STEP 2: Locate the Data
+
+From the text:
+- "All facilities are leased, **except for 166,000 square feet** of our office in **Alpharetta, Georgia**"
+- From the table: Alpharetta Georgia = 219,000 square feet (total)
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Total square footage in Alpharetta = 219,000 sq ft (from table)
+Data Point 2: Owned (not leased) square footage = 166,000 sq ft (from text)
+Data Point 3: Leased square footage = 219,000 - 166,000 = 53,000 sq ft
+
+Verification:
+- Location matches (Alpharetta, Georgia)? ✓
+- Units consistent (square feet)? ✓
+- Numbers reasonable (166k < 219k)? ✓
+```
+
+Wait, let me re-read the question: "what was the percent of the square footage in alpharetta georgia **not yet leased**"
+
+The text says "except for 166,000 square feet" - this means 166,000 sq ft is NOT leased (it's owned).
+
+## STEP 4: Choose the Right Formula
+
+This is a percentage calculation:
+**Formula: (Part / Total) × 100**
+
+Where:
+- Part = Square footage NOT leased = 166,000 sq ft
+- Total = Total square footage in Alpharetta = 219,000 sq ft
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 75.79908675799086
+Rounded (2 decimals): 75.8
+Rounded (1 decimal): 75.8
+```
+Formula: (Not Leased / Total) × 100
+Substitution: (166,000 / 219,000) × 100
+Calculation: 0.7580 × 100 = 75.80%
+Result: 75.8%
+```
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I'll format as a percentage with appropriate precision.
+
+Rounding to one decimal place: **75.8%**
+
+## Self-Check
+- [ ] Correct location (Alpharetta, Georgia)? ✓
+- [ ] Correct interpretation (not leased = owned)? ✓
+- [ ] Units consistent? ✓
+- [ ] Formula appropriate for percentage? ✓
+- [ ] Magnitude reasonable (between 0-100%)? ✓
+
+Answer: 75.8%
+
+--- Extracted Answer ---
+Answer: 75.8%
+Correct: ✓
+================================================================================
+
+【Sample 39】
+Question: what is the total amount of stock options cancelled in millions during 2017 , 2016 and 2015?
+Ground Truth: 12.1
+
+--- Full Reasoning Process ---
+I'll analyze this question step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+The question asks: "what is the total amount of stock options cancelled in millions during 2017, 2016 and 2015?"
+
+This is asking for information about **stock options cancelled**, which would require:
+- Direct lookup of stock options cancelled data
+- Potentially summing across multiple years
+
+## STEP 2: Locate the Data
+
+Let me carefully scan the provided data for information about "stock options cancelled."
+
+**Scanning the text:**
+- The data discusses guarantees and indemnifications
+- Information about common equity and authorized shares
+- Dividends declared per common share
+- Share repurchase program details
+- A table showing common share repurchases
+
+**Key observation:** The table provided shows:
+- Common share repurchases (in millions)
+- Average cost per share
+- Total cost of common share repurchases
+
+For years 2017, 2016, and 2015.
+
+## STEP 3: Extract and Verify
+
+**Critical Issue:** The question asks about "stock options cancelled" but the data provided only contains information about:
+1. Common share repurchases
+2. Guarantees and indemnifications
+3. Shareholders' equity
+4. Dividends
+
+**Verification:**
+- Is there any mention of "stock options" in the text? ❌ No
+- Is there any mention of "options cancelled"? ❌ No
+- Is there any mention of "cancellation"? ❌ No
+
+The table shows "common share repurchases" which is **different** from "stock options cancelled":
+- Share repurchases = buying back issued shares from the market
+- Stock options cancelled = cancellation of employee stock option grants
+
+## STEP 4: Conclusion
+
+**The data provided does not contain any information about stock options cancelled.** 
+
+The question cannot be answered with the given data. The table shows share repurchases (29.0M, 36.6M, and 22.1M shares for 2017, 2016, and 2015 respectively), but these are NOT stock options cancelled.
+
+Answer: The provided data does not contain information about stock options cancelled. The table shows common share repurchases, which is different from stock options cancelled. Therefore, this question cannot be answered with the given information.
+
+--- Extracted Answer ---
+Answer: The provided data does not contain information about stock options cancelled. The table shows common share repurchases, which is different from stock options cancelled. Therefore, this question cannot be answered with the given information.
+Correct: ✓
+================================================================================
+
+【Sample 40】
+Question: in 2004 and 2003 , what were the total shares of common stock that were issued to employees?
+Ground Truth: 3876875
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Direct Lookup** question asking for total shares of common stock issued to employees in both 2004 and 2003.
+
+## STEP 2: Locate the Data
+
+Scanning the text for information about common stock issued to employees...
+
+Found the relevant passage:
+"in 2004 and 2003 , the company had 1939734 shares and 1937141 shares , respectively , of common stock that were issued to employees."
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Common stock issued to employees in 2004 = 1,939,734 shares
+**Data Point 2:** Common stock issued to employees in 2003 = 1,937,141 shares
+
+**Verification:**
+- Years correct? ✓ (2004 and 2003 as requested)
+- Units consistent? ✓ (both in shares)
+- Numbers reasonable? ✓ (similar amounts across years)
+
+## STEP 4: Choose the Right Formula
+
+Since the question asks for "total shares" across both years, this is a **summation**:
+
+Formula: Total = Shares in 2004 + Shares in 2003
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 3876875
+**Calculation:**
+- Total = 1,939,734 + 1,937,141
+- Total = 3,876,875 shares
+
+## STEP 6: Format the Answer
+
+The question asks for total shares, so the answer should be a plain number representing the total count.
+
+Answer: 3876875
+
+--- Extracted Answer ---
+Answer: 3876875
+Correct: ✓
+================================================================================
+
+【Sample 41】
+Question: what is the net change in net revenue for entergy wholesale commodities during 2012?
+Ground Truth: -191
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Change** question - asking for the net change in net revenue between two periods (2011 to 2012).
+
+## STEP 2: Locate the Data
+
+Looking at the table provided for "entergy wholesale commodities":
+- The table shows a reconciliation from 2011 net revenue to 2012 net revenue
+- Starting point: 2011 net revenue
+- Ending point: 2012 net revenue
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Net Revenue 2011 = $2,045 million (from "2011 net revenue" row)
+Data Point 2: Net Revenue 2012 = $1,854 million (from "2012 net revenue" row)
+
+Verification:
+- Years correct (2011 to 2012)? ✓
+- Both in millions? ✓
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For a "net change" question, the formula is:
+**Change = New - Old**
+
+Or in this case:
+**Net Change = 2012 Net Revenue - 2011 Net Revenue**
+
+## STEP 5: Calculate
+
+```
+Formula: Net Change = 2012 - 2011
+Substitution: Net Change = $1,854 - $2,045
+Calculation: Net Change = -$191 million
+```
+
+## STEP 6: Format the Answer
+
+The question asks for "net change" which should be expressed as a number. Since this is a decrease, the answer is negative.
+
+The table actually shows this breakdown:
+- Starting: $2,045M
+- Nuclear realized price changes: -$194M
+- Nuclear volume: -$33M
+- Other: +$36M
+- Ending: $1,854M
+
+Verification: -194 + (-33) + 36 = -191 ✓
+
+Answer: -191
+
+--- Extracted Answer ---
+Answer: -191
+Correct: ✓
+================================================================================
+
+【Sample 42】
+Question: what was the difference in percentage cumulative total return for goldman sachs group inc . and the s&p 500 index for the five year period ending 12/31/13?
+Ground Truth: 12.16%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is asking for the **difference in percentage cumulative total return** between two investments over a five-year period. This requires:
+1. Finding the cumulative return for Goldman Sachs
+2. Finding the cumulative return for S&P 500
+3. Calculating the difference
+
+## STEP 2: Locate the Data
+
+Looking at the table for the period from 12/26/08 to 12/31/13:
+- Goldman Sachs Group Inc.: Started at $100.00, ended at $248.36
+- S&P 500 Index: Started at $100.00, ended at $236.20
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Goldman Sachs 12/26/08 = $100.00 (initial investment)
+Data Point 2: Goldman Sachs 12/31/13 = $248.36 (ending value)
+Data Point 3: S&P 500 12/26/08 = $100.00 (initial investment)
+Data Point 4: S&P 500 12/31/13 = $236.20 (ending value)
+
+Verification:
+- Time periods match? ✓ (both 12/26/08 to 12/31/13)
+- Same initial investment? ✓ (both $100.00)
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For cumulative total return percentage:
+**Cumulative Return % = ((Ending Value - Initial Value) / Initial Value) × 100**
+
+Then find the difference between the two returns.
+
+## STEP 5: Calculate
+
+**Goldman Sachs cumulative return:**
+- Formula: ((248.36 - 100.00) / 100.00) × 100
+- Calculation: (148.36 / 100.00) × 100 = 148.36%
+
+**S&P 500 cumulative return:**
+- Formula: ((236.20 - 100.00) / 100.00) × 100
+- Calculation: (136.20 / 100.00) × 100 = 136.20%
+
+**Difference:**
+- Formula: Goldman Sachs Return - S&P 500 Return
+- Calculation: 148.36% - 136.20% = 12.16%
+
+## STEP 6: Format the Answer
+
+The question asks for "the difference in percentage cumulative total return," so the answer should be expressed as a percentage.
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 12.160000000000025
+Rounded (2 decimals): 12.16
+Rounded (1 decimal): 12.2
+Perfect! The calculation confirms my manual work.
+
+**Answer: 12.16%**
+
+--- Extracted Answer ---
+Answer: 12.16%**
+Correct: ✓
+================================================================================
+
+【Sample 43】
+Question: as of december 31 , 2017 what was the value of the granted share awards
+Ground Truth: 9294571.92
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **multiplication/valuation** question asking for the total value of granted performance share awards.
+
+## STEP 2: Locate the Data
+
+Looking at the performance share awards table for the year ended December 31, 2017:
+- Row: "granted"
+- Columns needed: "number of performance share awards" and "weighted-average grant-date fair value"
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Number of granted awards = 160,196 shares (from "granted" row)
+Data Point 2: Weighted-average grant-date fair value = $58.02 (from "granted" row)
+
+Verification:
+- Both values from same "granted" row? ✓
+- Units: shares and dollars per share? ✓
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+To find the total value of granted awards:
+**Formula: Total Value = Number of Shares × Price per Share**
+
+## STEP 5: Calculate
+
+```
+Formula: Total Value = Number of Shares × Grant-Date Fair Value
+Substitution: Total Value = 160,196 × $58.02
+Calculation: 160,196 × 58.02 = $9,294,571.92
+```
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: 9294571.92
+Rounded (2 decimals): 9294571.92
+Rounded (1 decimal): 9294571.9
+## STEP 6: Format the Answer
+
+The question asks for "the value" which should be expressed in dollars. Given the context of the financial data (which shows values in millions elsewhere), I should express this clearly.
+
+The total value is $9,294,571.92, which can be expressed as approximately $9.29 million or $9,294,571.92.
+
+Since the question asks for "the value" without specifying units, and given that other values in the document are in millions, the most appropriate answer would be in millions.
+
+$9,294,571.92 ÷ 1,000,000 = $9.29 million (rounded to 2 decimal places)
+
+However, looking at the exact calculation: $9,294,571.92
+
+Answer: $9,294,571.92
+
+--- Extracted Answer ---
+Answer: $9,294,571.92
+Correct: ✓
+================================================================================
+
+【Sample 44】
+Question: what percent of total contractual obligations is categorized as long term debt?
+Ground Truth: 45.10%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage calculation** question: "What percent of total contractual obligations is categorized as long term debt?"
+
+## STEP 2: Locate the Data
+
+I need to find:
+1. Long-term debt amount
+2. Total contractual obligations amount
+
+Looking at the contractual obligations table at the bottom of the data.
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Long-term debt = $460.1 million (from "long-term debt" row, "total" column)
+
+**Data Point 2:** Total contractual obligations = $1,020.1 million (from "total contractual obligations" row, "total" column)
+
+**Verification:**
+- Both values from the "total" column? ✓
+- Both in millions? ✓
+- Long-term debt is part of total obligations? ✓
+- Numbers reasonable? ✓ (460.1 < 1,020.1)
+
+## STEP 4: Choose the Right Formula
+
+For percentage calculation:
+**Formula:** (Part / Total) × 100
+
+Where:
+- Part = Long-term debt = $460.1 million
+- Total = Total contractual obligations = $1,020.1 million
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 45.10342123321243
+Rounded (2 decimals): 45.1
+Rounded (1 decimal): 45.1
+**Calculation:**
+- Formula: (460.1 / 1,020.1) × 100
+- Result: 45.10%
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I'll format as a percentage with appropriate precision.
+
+Rounding to 2 decimal places: 45.10%
+
+## Self-Check
+- [ ] Correct time period? ✓ (using "total" column)
+- [ ] Units consistent? ✓ (both in millions)
+- [ ] Correct formula? ✓ (percentage calculation)
+- [ ] Format matches question? ✓ (percentage)
+- [ ] Magnitude reasonable? ✓ (45% is reasonable - less than half)
+- [ ] Correct row labels? ✓ (long-term debt and total)
+
+Answer: 45.10%
+
+--- Extracted Answer ---
+Answer: 45.10%
+Correct: ✓
+================================================================================
+
+【Sample 45】
+Question: what was the average cash flow from 2004 to 2006
+Ground Truth: 892.3
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **multi-period aggregation with average calculation**. I need to find the average cash flow across three years (2004, 2005, and 2006).
+
+## STEP 2: Locate the Data
+
+Looking at the table at the bottom of the data, I can see a row labeled "cash flow" with values for 2006, 2005, and 2004.
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Cash flow 2006 = $957.4 million (from "cash flow" row, "2006" column)
+Data Point 2: Cash flow 2005 = $769.1 million (from "cash flow" row, "2005" column)
+Data Point 3: Cash flow 2004 = $950.4 million (from "cash flow" row, "2004" column)
+
+Verification:
+- All three years present? ✓
+- All in millions? ✓
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+For average calculation:
+**Formula: Average = (Sum of all values) / (Number of values)**
+
+Average = (Cash flow 2004 + Cash flow 2005 + Cash flow 2006) / 3
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 892.3000000000001
+Rounded (2 decimals): 892.3
+Rounded (1 decimal): 892.3
+```
+Formula: Average = (Cash flow 2004 + Cash flow 2005 + Cash flow 2006) / 3
+Substitution: (950.4 + 769.1 + 957.4) / 3
+Calculation: 2676.9 / 3 = 892.3
+Result: 892.3 million
+```
+
+## STEP 6: Format the Answer
+
+Since the question asks for "average cash flow" and the data is in millions of dollars, the answer should be: **892.3** (in millions)
+
+Answer: 892.3
+
+--- Extracted Answer ---
+Answer: 892.3
+Correct: ✓
+================================================================================
+
+【Sample 46】
+Question: what is the total value of securities issued and approved by security holders , ( in millions ) ?
+Ground Truth: 31.3
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **multiplication/valuation** question. I need to calculate the total value of securities by multiplying the number of securities by their weighted-average exercise price.
+
+## STEP 2: Locate the Data
+
+Looking at the table for "equity compensation plans approved by security holders":
+- Number of securities to be issued upon exercise: 766,801
+- Weighted-average exercise price: $40.85
+
+## STEP 3: Extract and Verify
+
+```
+Data Point 1: Number of securities = 766,801 (from column (a), row "equity compensation plans approved by security holders")
+Data Point 2: Weighted-average exercise price = $40.85 (from column (b), same row)
+
+Verification:
+- Both values from correct row? ✓
+- Units: number of shares and price per share ✓
+- Values reasonable? ✓
+```
+
+## STEP 4: Choose the Right Formula
+
+To find total value:
+**Formula: Total Value = Number of Securities × Weighted-Average Exercise Price**
+
+## STEP 5: Calculate
+
+Let me use the calculation tool to ensure precision:
+[Tool: execute_calculation] → Result: 31323820.85
+Rounded (2 decimals): 31323820.85
+Rounded (1 decimal): 31323820.9
+Now converting to millions as requested:
+[Tool: execute_calculation] → Result: 31.32382085
+Rounded (2 decimals): 31.32
+Rounded (1 decimal): 31.3
+## STEP 6: Format the Answer
+
+The question asks for the value "in millions", so:
+
+```
+Calculation: 766,801 × $40.85 = $31,323,820.85
+In millions: $31,323,820.85 ÷ 1,000,000 = $31.32 million
+```
+
+Rounding to 2 decimal places for standard financial reporting.
+
+Answer: 31.32
+
+--- Extracted Answer ---
+Answer: 31.32
+Correct: ✓
+================================================================================
+
+【Sample 47】
+Question: what is the percentage change in revenue generated from non-us currencies from 2015 to 2016?
+Ground Truth: 42.9%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **Percentage Change** question - asking for the percentage change in revenue from non-U.S. currencies between two time periods (2015 to 2016).
+
+## STEP 2: Locate the Data
+
+Scanning the text for revenue information denominated in non-U.S. currencies:
+- The passage states: "during the years ended december 31 , 2017 , 2016 and 2015 , we generated approximately $ 1830 million , $ 1909 million and $ 1336 million , respectively , in revenues denominated in currencies other than the u.s . dollar"
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Revenue from non-U.S. currencies in 2015 = $1,336 million
+**Data Point 2:** Revenue from non-U.S. currencies in 2016 = $1,909 million
+
+**Verification:**
+- Years correct? ✓ (2015 is the "old" value, 2016 is the "new" value)
+- Units consistent? ✓ (both in millions)
+- Values reasonable? ✓ (revenue increased from 2015 to 2016)
+
+## STEP 4: Choose the Right Formula
+
+For percentage change:
+**Formula:** `((New - Old) / Old) × 100`
+
+## STEP 5: Calculate
+
+**Formula:** Percentage Change = ((2016 Revenue - 2015 Revenue) / 2015 Revenue) × 100
+
+**Substitution:** ((1909 - 1336) / 1336) × 100
+
+**Calculation:**
+- Change = 1909 - 1336 = 573
+- Percentage = (573 / 1336) × 100
+[Tool: execute_calculation] → Result: 42.88922155688623
+Rounded (2 decimals): 42.89
+Rounded (1 decimal): 42.9
+**Result:** 42.89%
+
+## STEP 6: Format the Answer
+
+The question asks for "percentage change," so the answer should be formatted as a percentage.
+
+**Self-Check:**
+- [ ] Correct time period? ✓ (2015 to 2016)
+- [ ] Units consistent? ✓ (both in millions)
+- [ ] Correct formula? ✓ (percentage change formula)
+- [ ] Format matches question? ✓ (percentage)
+- [ ] Magnitude reasonable? ✓ (42.89% increase is reasonable given the $573M increase on a $1,336M base)
+
+Answer: 42.89%
+
+--- Extracted Answer ---
+Answer: 42.89%
+Correct: ✓
+================================================================================
+
+【Sample 48】
+Question: what was the percentage decrease in cash flows from operations from 2009 to 2010?
+Ground Truth: 8.0%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage change** question - specifically asking for the "percentage decrease" from 2009 to 2010.
+
+## STEP 2: Locate the Data
+
+Looking at the cash flows table, I need:
+- The row: "cash flows provided by (used in) operating activities including discontinued operations"
+- The columns: 2009 and 2010
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Cash flows from operations 2009 = $559.7 million (from "operating activities" row, "2009" column)
+
+**Data Point 2:** Cash flows from operations 2010 = $515.2 million (from "operating activities" row, "2010" column)
+
+**Verification:**
+- Years correct? ✓ (2009 is the "old" value, 2010 is the "new" value)
+- Units consistent? ✓ (both in millions)
+- Values reasonable? ✓ (both positive, 2010 is lower than 2009, which matches "decrease")
+
+## STEP 4: Choose the Right Formula
+
+For percentage change (or percentage decrease):
+**Formula:** `((New - Old) / Old) × 100`
+
+Where:
+- Old = 2009 value = 559.7
+- New = 2010 value = 515.2
+
+## STEP 5: Calculate
+
+**Substitution:** `((515.2 - 559.7) / 559.7) × 100`
+
+**Step-by-step:**
+- Change = 515.2 - 559.7 = -44.5
+- Percentage = (-44.5 / 559.7) × 100
+- Percentage = -0.07951... × 100
+- Percentage = -7.95%
+
+The negative sign indicates a decrease, which matches the question's expectation.
+
+## STEP 6: Format the Answer
+
+Since the question asks for "percentage decrease," I can express this as either:
+- "-7.95%" (showing it's a decrease with negative sign)
+- "7.95%" (understanding "decrease" is already stated in the question)
+
+Given the question explicitly says "decrease," the magnitude is what's being asked for.
+
+Let me verify this calculation:
+[Tool: execute_calculation] → Result: -7.950687868500982
+Rounded (2 decimals): -7.95
+Rounded (1 decimal): -8.0
+Perfect! The calculation confirms -7.95%.
+
+Since the question asks for the "percentage decrease," the answer should reflect the magnitude of the decrease.
+
+**Answer: 7.95%**
+
+--- Extracted Answer ---
+Answer: 7.95%**
+Correct: ✓
+================================================================================
+
+【Sample 49】
+Question: what percentage of the total carrying amount of investment securities is the securities held to maturity?
+Ground Truth: 16.93%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the FinQA reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question. I need to find what percentage "securities held to maturity" represents of the "total carrying amount of investment securities."
+
+## STEP 2: Locate the Data
+
+Looking at the table, I need to identify:
+1. The "carrying amount" - this typically refers to the **fair value** for investment securities
+2. The total investment securities value
+3. The securities held to maturity value
+
+The table shows data for two dates: December 31, 2012 (two columns) and what appears to be December 31, 2011 (labeled as "amortized cost" and "fair value" in the second set).
+
+Since the question asks about "the total carrying amount" without specifying a date, I should use the most recent data: **December 31, 2012**.
+
+## STEP 3: Extract and Verify
+
+Looking at December 31, 2012 columns:
+
+**Data Point 1:** Total securities (fair value) = $61,912 million
+- This is from the "total securities" row, "fair value" column for Dec 31, 2012
+
+**Data Point 2:** Securities held to maturity (fair value) = $10,860 million  
+- This is from the "total securities held to maturity" row, "fair value" column for Dec 31, 2012
+
+**Verification:**
+- Using fair value (carrying amount) for both? ✓
+- Same date (Dec 31, 2012)? ✓
+- Units consistent (millions)? ✓
+- Numbers reasonable? ✓
+
+## STEP 4: Choose the Right Formula
+
+Formula for percentage: **(Part / Total) × 100**
+
+Where:
+- Part = Securities held to maturity = $10,860 million
+- Total = Total securities = $61,912 million
+
+## STEP 5: Calculate
+[Tool: execute_calculation] → Result: 17.54102597234785
+Rounded (2 decimals): 17.54
+Rounded (1 decimal): 17.5
+**Calculation:**
+- Formula: (10,860 / 61,912) × 100
+- Result: 17.54%
+
+## STEP 6: Format the Answer
+
+The question asks for a percentage, so I should format with the % symbol.
+
+Rounding to 2 decimal places: **17.54%**
+
+## Self-Check
+- [ ] Correct time period? ✓ (Dec 31, 2012 - most recent)
+- [ ] Correct values? ✓ (Used fair value as carrying amount)
+- [ ] Correct formula? ✓ (Part/Total × 100 for percentage)
+- [ ] Reasonable magnitude? ✓ (17.54% seems reasonable)
+- [ ] Proper format? ✓ (Percentage with % symbol)
+
+Answer: 17.54%
+
+--- Extracted Answer ---
+Answer: 17.54%
+Correct: ✗
+================================================================================
+
+【Sample 50】
+Question: for the quarter ended 12/29/2018 what was the percent of the total shares bought after 11/25/2018
+Ground Truth: 32.5%
+
+--- Full Reasoning Process ---
+I'll solve this step-by-step using the finqa-reasoning framework.
+
+## STEP 1: Understand the Question Type
+
+This is a **percentage calculation** question asking: "What percent of total shares bought in the quarter were purchased in a specific period (after 11/25/2018)?"
+
+## STEP 2: Locate the Data
+
+Looking at the table for the quarter ended 12/29/2018, I need:
+- Total shares purchased for the entire quarter
+- Shares purchased in the period 11/25/18 to 12/29/18
+
+## STEP 3: Extract and Verify
+
+**Data Point 1:** Total shares purchased in the quarter = 630,000 shares
+(from "total/average" row, "shares purchased" column)
+
+**Data Point 2:** Shares purchased after 11/25/18 = 205,000 shares
+(from "11/25/18 to 12/29/18" row, "shares purchased" column)
+
+**Verification:**
+- The period 11/25/18 to 12/29/18 is indeed after 11/25/2018 ✓
+- Both values are in the same units (number of shares) ✓
+- 205,000 < 630,000 (part is less than total) ✓
+
+## STEP 4: Choose the Right Formula
+
+This is a percentage calculation:
+**Formula:** (Part / Total) × 100
+
+Where:
+- Part = Shares purchased after 11/25/18 = 205,000
+- Total = Total shares purchased in quarter = 630,000
+
+## STEP 5: Calculate
+
+**Formula:** (205,000 / 630,000) × 100
+
+**Calculation:** 
+- 205,000 ÷ 630,000 = 0.32539...
+- 0.32539... × 100 = 32.539...%
+
+**Result:** 32.54% (rounded to 2 decimal places)
+
+## STEP 6: Format the Answer
+
+The question asks for a percent, so I'll format as a percentage.
+
+**Self-Check:**
+- [ ] Correct time period? Yes - 11/25/18 to 12/29/18 ✓
+- [ ] Units consistent? Yes - both in shares ✓
+- [ ] Correct formula? Yes - percentage calculation ✓
+- [ ] Reasonable magnitude? Yes - 32.54% is reasonable ✓
+
+Answer: 32.54%
+
+--- Extracted Answer ---
+Answer: 32.54%
+Correct: ✗
+================================================================================
+
+
+Summary:
+Accuracy: 37/50 (74.0%)
+Improvement over baseline: +0.0%

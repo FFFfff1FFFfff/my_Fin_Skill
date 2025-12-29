@@ -1,0 +1,357 @@
+================================================================================
+BASELINE RESULTS
+================================================================================
+
+【Sample 1】
+Question: what is the net change in net revenue during 2015 for entergy corporation?
+Ground Truth: 94
+Prediction: 94
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 2】
+Question: what percentage of total facilities as measured in square feet are leased?
+Ground Truth: 14%
+Prediction: 14.5%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 3】
+Question: what is the percentage change in cash flow hedges in 2011 compare to the 2010?
+Ground Truth: 9.9%
+Prediction: -2.14%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 4】
+Question: what portion of total purchase price is related to stock awards?
+Ground Truth: 2.9%
+Prediction: 0.029
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 5】
+Question: what was the difference in percentage cumulative total shareholder return on masco common stock versus the s&p 500 index for the five year period ended 2017?
+Ground Truth: 
+Prediction: 111.97
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 6】
+Question: what was the percentage change in total rental expense under operating leases from july 2 , 2005 to july 1 , 2006?
+Ground Truth: 7%
+Prediction: 8.6%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 7】
+Question: what percent of total recourse debt is current?
+Ground Truth: 10%
+Prediction: 10%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 8】
+Question: what percentage of future minimum rental payments are due in 2018?
+Ground Truth: 12%
+Prediction: 11.69%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 9】
+Question: did altria outperform the s&p 500?
+Ground Truth: yes
+Prediction: Yes
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 10】
+Question: what was the change in unrecognized tax benefits from the end of 2014 to the end of 2015?
+Ground Truth: -35
+Prediction: -35
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 11】
+Question: what is the growth rate in the balance of standby letters of credit from 2006 to 2007?
+Ground Truth: -4.4%
+Prediction: -4.6%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 12】
+Question: what is the debt-to-asset ratio?
+Ground Truth: 22.4%
+Prediction: 0.22
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 13】
+Question: what portion of the total noncancelable future lease commitments are due in fiscal year of 2019?
+Ground Truth: 24.6%
+Prediction: 0.246
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 14】
+Question: was the five year total return of the 2019 peer group greater than the 2018 peer group?
+Ground Truth: no
+Prediction: No
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 15】
+Question: what was the percentage change in deferred tax assets and regulatory assets from 2013 to 2014
+Ground Truth: 1.7%
+Prediction: 1.72%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 16】
+Question: what was the average net annual change in discounted future net cash flows ( in millions ) for the years 2011 , 2010 , and 2009?
+Ground Truth: 3298
+Prediction: 3297.67
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 17】
+Question: assuming each continent has the same number of destinations , approximately how many destinations does each continent have?
+Ground Truth: 65
+Prediction: 65
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 18】
+Question: what was the average net revenue between 2016 and 2017 in millions
+Ground Truth: 704.25
+Prediction: 704.25
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 19】
+Question: the combined amount of accrued interest and penalties related to tax positions taken on our tax returns and included in non-current income taxes payable was what percent of the total ending balance as of november 28 2008?
+Ground Truth: 11.0%
+Prediction: 12%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 20】
+Question: in 2010 and 2009 , what was the total fair value in billions of assets segregated for the benefit of securities and futures brokerage customers?
+Ground Truth: 68.9
+Prediction: I cannot answer this question because the data provided does not contain any information about assets segregated for the benefit of securities and futures brokerage customers. The table only shows U.S. and non-U.S. components of income before income
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 21】
+Question: what was the percentage change in the commercial mortgage loans designated for sale at fair value from 2008 to 2009
+Ground Truth: -8.4%
+Prediction: I cannot answer this question because the data provided shows information for December 31, 2012 and December 31, 2011, not for 2008 and 2009.
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 22】
+Question: what was the difference in percentage cumulative 5-year total shareholder return on common stock fidelity national information services , inc . compared to the s&p 500 for the period ending 12/16?
+Ground Truth: 113.63%
+Prediction: 113.63
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 23】
+Question: for the quarter ended march 312015 what was the percentage change in the share price from the highest to the lowest
+Ground Truth: 9.3%
+Prediction: 9.3
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 24】
+Question: of the total contractual obligations and off-balance sheet arrangements contractual obligations what percentage is due to capital lease obligations?
+Ground Truth: 2%
+Prediction: 1.74%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 25】
+Question: what is the ratio of the total flight attendants to total maintenance personnel
+Ground Truth: 1.6
+Prediction: 1.59
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 26】
+Question: as of december 2007 what was the ratio of the square footage in alpharetta georgia to charlotte north carolina
+Ground Truth: 2.64
+Prediction: 2.64
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 27】
+Question: in 2010 what was the percent of the income tax benefit to the stock based compensation cost
+Ground Truth: 34.8%
+Prediction: 34.8
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 28】
+Question: what is the percentage change in the the gross liability for unrecognized tax benefits during 2008 compare to 2007?
+Ground Truth: -30.9%
+Prediction: -30.9%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 29】
+Question: what was the total impairment costs recorded from 2003 to 2005 in millions
+Ground Truth: 5.8
+Prediction: I cannot find any information about impairment costs in the provided data. The text discusses inventory valuation, securities, pre-opening costs, and property/equipment depreciation, but does not mention impairment costs for the years 2003
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 30】
+Question: what is the borrowing under the term loan facility as a percentage of the total contractual maturities of long-term debt obligations due subsequent to december 31 , 2016?
+Ground Truth: 114%
+Prediction: 99.8%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 31】
+Question: in 2015 what was the percent of the total operating revenues associated with agriculture products
+Ground Truth: 16.4%
+Prediction: 16.4%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 32】
+Question: what percent of net interest revenue where total operating expenses in 2009?
+Ground Truth: 28%
+Prediction: 28.2
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 33】
+Question: what was the greatest provision for income taxes , in millions?
+Ground Truth: 829
+Prediction: 829
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 34】
+Question: in 2018 what was the percent of the cib markets net interest income as part of the managed interest income
+Ground Truth: 5.54%
+Prediction: 5.5%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 35】
+Question: what would the fair value of total securities available for sale be without the fair value of securities classified as corporate stocks as of december 31 , 2012?
+Ground Truth: 61545
+Prediction: I cannot answer this question with the data provided. The table does not break down the securities available for sale by type (such as corporate stocks vs. other securities), so it's impossible to calculate what the fair value would be excluding corporate stocks.
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 36】
+Question: assuming the same level of settlements as in fiscal 2007 , what would be the ending balance at march 31 2008 in millions for unrecognized tax benefits?\\n
+Ground Truth: 112
+Prediction: 112
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 37】
+Question: as of december 2012 what is the percent of the square footage not leased to the total square footage in alpharetta , georgia
+Ground Truth: 64.9%
+Prediction: 65%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 38】
+Question: as of december 2007 what was the percent of the square footage in alpharetta georgia not yet leased
+Ground Truth: 75.8%
+Prediction: 76%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 39】
+Question: what is the total amount of stock options cancelled in millions during 2017 , 2016 and 2015?
+Ground Truth: 12.1
+Prediction: I cannot answer this question because the data provided does not contain any information about stock options cancelled during 2017, 2016, and 2015. The data only shows information about common share repurchases, dividends, and guarantees
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 40】
+Question: in 2004 and 2003 , what were the total shares of common stock that were issued to employees?
+Ground Truth: 3876875
+Prediction: 3876875
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 41】
+Question: what is the net change in net revenue for entergy wholesale commodities during 2012?
+Ground Truth: -191
+Prediction: -191
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 42】
+Question: what was the difference in percentage cumulative total return for goldman sachs group inc . and the s&p 500 index for the five year period ending 12/31/13?
+Ground Truth: 12.16%
+Prediction: 12.16
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 43】
+Question: as of december 31 , 2017 what was the value of the granted share awards
+Ground Truth: 9294571.92
+Prediction: 9290574.92
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 44】
+Question: what percent of total contractual obligations is categorized as long term debt?
+Ground Truth: 45.10%
+Prediction: 45.1%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 45】
+Question: what was the average cash flow from 2004 to 2006
+Ground Truth: 892.3
+Prediction: 892.3
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 46】
+Question: what is the total value of securities issued and approved by security holders , ( in millions ) ?
+Ground Truth: 31.3
+Prediction: 31.3
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 47】
+Question: what is the percentage change in revenue generated from non-us currencies from 2015 to 2016?
+Ground Truth: 42.9%
+Prediction: 42.9%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+【Sample 48】
+Question: what was the percentage decrease in cash flows from operations from 2009 to 2010?
+Ground Truth: 8.0%
+Prediction: 7.9%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 49】
+Question: what percentage of the total carrying amount of investment securities is the securities held to maturity?
+Ground Truth: 16.93%
+Prediction: 17.3%
+Correct: ✗
+--------------------------------------------------------------------------------
+
+【Sample 50】
+Question: for the quarter ended 12/29/2018 what was the percent of the total shares bought after 11/25/2018
+Ground Truth: 32.5%
+Prediction: 32.5%
+Correct: ✓
+--------------------------------------------------------------------------------
+
+
+Summary:
+Accuracy: 37/50 (74.0%)
