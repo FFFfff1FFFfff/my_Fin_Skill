@@ -1,4 +1,4 @@
-name	web-search-tool
+name	web_search_tool
 description	Web search capability for retrieving up-to-date information from the internet
 
 # Web Search Tool

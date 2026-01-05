@@ -148,7 +148,7 @@ def run_benchmark(source: str = "sample", limit: int = 50,
 
     # Load skills
     skill_manager = SkillManager()
-    skill_names = ['web-search-tool', 'conflicting-info-reasoner']
+    skill_names = ['web_search_tool', 'conflicting_info_reasoner']
     skill_prompt = skill_manager.build_system_prompt(skill_names)
     print(f"Loaded skills: {skill_names}")
     print(f"Search enabled: {use_search} (backend: {search_backend})")

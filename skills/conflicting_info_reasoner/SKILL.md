@@ -1,4 +1,4 @@
-name	conflicting-info-reasoner
+name	conflicting_info_reasoner
 description	Framework for handling conflicting, noisy, or uncertain information from multiple sources
 
 # Conflicting Information Reasoner
