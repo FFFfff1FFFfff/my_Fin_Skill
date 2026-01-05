@@ -56,13 +56,17 @@ Use web search to find current information if needed.
 Follow the reasoning framework in the system prompt.
 Give a direct, concise answer."""
 
-        # Enable web search tool
+        # Enable web search tool (correct format with name field)
         response = client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=4096,
             temperature=0,
             system=skill_prompt,
-            tools=[{"type": "web_search_20250305"}],
+            tools=[{
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 3
+            }],
             messages=[{"role": "user", "content": user_prompt}]
         )
 
@@ -71,7 +75,7 @@ Give a direct, concise answer."""
         for block in response.content:
             if hasattr(block, 'text'):
                 answer_parts.append(block.text)
-        return " ".join(answer_parts).strip()
+        return " ".join(answer_parts).strip() if answer_parts else "No answer generated"
 
     elif use_search and search_backend in ["tavily", "serper"]:
         # Use external search API
