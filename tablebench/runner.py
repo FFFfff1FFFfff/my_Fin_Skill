@@ -26,6 +26,22 @@ def extract_answer(text: str) -> str:
     match = re.search(r'Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
     if match:
         return match.group(1).strip()
+
+    # Look for bold answer like **1251** or **1251
+    match = re.search(r'\*\*(-?\d+\.?\d*)\*?\*?', text)
+    if match:
+        return match.group(1)
+
+    # Look for "= number" at end of calculation
+    match = re.search(r'=\s*(-?\d+\.?\d*)\s*$', text, re.MULTILINE)
+    if match:
+        return match.group(1)
+
+    # Try to find the last number in the text
+    numbers = re.findall(r'-?\d+\.?\d*', text)
+    if numbers:
+        return numbers[-1]
+
     # Fallback: return last non-empty line
     lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
     return lines[-1] if lines else text.strip()
@@ -33,44 +49,52 @@ def extract_answer(text: str) -> str:
 
 def ask_baseline(question: str, table: str, model: str = "claude-sonnet-4-5-20250929") -> str:
     """Baseline: direct question without skill enhancement."""
-    prompt = f"""Answer this question about the table below. Give ONLY the final answer.
+    prompt = f"""Answer this question about the table below.
 
 Table:
 {table}
 
 Question: {question}
 
-Answer:"""
+Output ONLY the final numeric answer. No explanation, no units, just the number.
+Example: 1251"""
 
     response = client.messages.create(
         model=model,
-        max_tokens=100,
+        max_tokens=50,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
-    return response.content[0].text.strip()
+    raw_answer = response.content[0].text.strip()
+    return extract_answer(raw_answer)
 
 
 def ask_with_skill(question: str, table: str, skill_prompt: str,
-                   model: str = "claude-sonnet-4-5-20250929") -> str:
-    """With skill: question with skill-enhanced system prompt."""
+                   model: str = "claude-sonnet-4-5-20250929") -> tuple[str, str]:
+    """With skill: question with skill-enhanced system prompt.
+
+    Returns:
+        tuple: (full_response, extracted_answer)
+    """
     user_prompt = f"""Table:
 {table}
 
 Question: {question}
 
-Follow the reasoning framework above. End with "Answer: [your answer]"."""
+Follow the reasoning framework. Show your work, then end with:
+Answer: [numeric value only, no units]"""
 
     response = client.messages.create(
         model=model,
-        max_tokens=500,
+        max_tokens=1024,
         temperature=0,
         system=skill_prompt,
         messages=[{"role": "user", "content": user_prompt}]
     )
 
     full_response = response.content[0].text.strip()
-    return extract_answer(full_response)
+    extracted = extract_answer(full_response)
+    return full_response, extracted
 
 
 def run_benchmark(source: str = "sample", limit: int = 50, model: str = "claude-sonnet-4-5-20250929"):
@@ -138,8 +162,9 @@ def run_benchmark(source: str = "sample", limit: int = 50, model: str = "claude-
         })
 
         # With skill
+        full_response = ""
         try:
-            pred_skill = ask_with_skill(question, table, skill_prompt, model)
+            full_response, pred_skill = ask_with_skill(question, table, skill_prompt, model)
             correct_skill = evaluate_sample(pred_skill, ground_truth, qtype)
             print(f"Skill:    {pred_skill} {'✓' if correct_skill else '✗'}")
         except Exception as e:
@@ -153,6 +178,7 @@ def run_benchmark(source: str = "sample", limit: int = 50, model: str = "claude-
             "qsubtype": qsubtype,
             "question": question,
             "ground_truth": ground_truth,
+            "full_response": full_response,
             "prediction": pred_skill,
             "correct": correct_skill
         })
