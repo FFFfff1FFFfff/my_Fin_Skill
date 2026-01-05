@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 tablebench_results_*.json
+sealqa_results_*.json
+*.jsonl
