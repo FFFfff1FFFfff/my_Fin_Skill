@@ -8,6 +8,7 @@ import json
 import os
 from anthropic import Anthropic
 from skill_system import SkillManager
+from finqa_evaluator import finqa_equal
 
 client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
@@ -94,7 +95,15 @@ Data:
 Question: {question}
 
 You can show your reasoning process, but you MUST end with:
-Answer: [your final answer here]"""
+Answer: [your final answer here]
+
+**Answer Format Requirements** (CRITICAL for correct evaluation):
+- Output ONLY the numeric value, no units or symbols
+- For percentages: output the number only (e.g., "14" not "14%" or "0.14")
+- For currency: output the number only (e.g., "1234" not "$1,234")
+- Round to at most 5 decimal places
+- No commas in numbers (e.g., "1234567" not "1,234,567")
+- For negative numbers: use minus sign (e.g., "-5")"""
 
     messages = [{"role": "user", "content": prompt}]
     
@@ -188,37 +197,6 @@ Answer: [your final answer here]"""
     return complete_response, final_answer
 
 
-def llm_judge(question, context, prediction, ground_truth, model="claude-sonnet-4-5-20250929"):
-    """
-    Pure LLM-based judge for answer evaluation
-    Simple and direct to avoid over-guidance
-    """
-    
-    judge_prompt = f"""Compare these two answers to the same question:
-
-Question: {question}
-
-Ground Truth: {ground_truth}
-Predicted: {prediction}
-
-Are they equivalent? Consider:
-- Format differences OK (14% = 14 = 0.14 if percentage context)
-- Minor rounding OK (±0.5 absolute or ±3% relative)
-- Different values = WRONG
-
-Answer ONLY "CORRECT" or "INCORRECT":"""
-
-    message = client.messages.create(
-        model=model,
-        max_tokens=20,
-        temperature=0,
-        messages=[{"role": "user", "content": judge_prompt}]
-    )
-
-    response = message.content[0].text.strip().upper()
-    return "CORRECT" in response
-
-
 def run_comparison_with_tools(dataset_path, start_idx=0, end_idx=10):
     """
     Run comparison with actual tool execution
@@ -270,7 +248,7 @@ def run_comparison_with_tools(dataset_path, start_idx=0, end_idx=10):
         # Test baseline
         try:
             pred_baseline = ask_baseline(question, context)
-            is_correct_baseline = llm_judge(question, context, pred_baseline, ground_truth)
+            is_correct_baseline = finqa_equal(pred_baseline, ground_truth)
 
             print(f"Baseline: '{pred_baseline}' → {'✓' if is_correct_baseline else '✗'}")
 
@@ -296,7 +274,7 @@ def run_comparison_with_tools(dataset_path, start_idx=0, end_idx=10):
         # Test with skills + tools
         try:
             full_response, final_answer = ask_with_tools(question, context, skill_manager, skill_names)
-            is_correct_skills = llm_judge(question, context, final_answer, ground_truth)
+            is_correct_skills = finqa_equal(final_answer, ground_truth)
 
             # Print full reasoning process
             print(f"With Tools (Reasoning):")

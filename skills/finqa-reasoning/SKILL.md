@@ -104,14 +104,22 @@ Result: [final number]
 
 ### STEP 6: Format the Answer
 
-**Match the expected format:**
+**CRITICAL: Output format for evaluation compatibility:**
 
-- Question mentions "percentage" → Add % symbol: `"14%"`
-- Question asks for "change in dollars" → Plain number: `"94"`
-- Question asks for "ratio" → Decimal: `"2.0"`
-- Yes/no question → `"yes"` or `"no"`
+- **Always output ONLY the numeric value** (no units, no symbols)
+- Percentages: output the number only → `14` (NOT "14%" or "0.14")
+- Currency: output the number only → `1234` (NOT "$1,234")
+- No commas in large numbers → `1234567` (NOT "1,234,567")
+- Round to at most 5 decimal places
+- Negative numbers: use minus sign → `-5`
 
-**Pro tip:** Look at how the question is phrased to determine format.
+**Examples:**
+| Question asks for | Correct output | Wrong outputs |
+|------------------|----------------|---------------|
+| percentage | `14` | `14%`, `0.14` |
+| dollar amount | `1234` | `$1,234`, `1,234` |
+| ratio | `2.5` | `2.5:1`, `2.5x` |
+| yes/no | `yes` or `no` | `Yes`, `YES` |
 
 ---
 
@@ -197,11 +205,11 @@ STEP 3:
   - Total facilities = 1,000 (from "Total" row)
   - Verification: Both in same units ✓
 STEP 4: Formula = (Part / Total) × 100
-STEP 5: Calculate = (140 / 1000) × 100 = 14.0%
-STEP 6: Format = "14%"
+STEP 5: Calculate = (140 / 1000) × 100 = 14.0
+STEP 6: Format = "14" (number only, no %)
 ```
 
-**Answer:** 14%
+**Answer:** 14
 
 ### Example 2: Absolute Change
 
@@ -235,11 +243,11 @@ STEP 3:
   - Net Income 2019 = 550 million
   - Verification: 2018 < 2019 ✓, same units ✓
 STEP 4: Formula = ((New - Old) / Old) × 100
-STEP 5: Calculate = ((550 - 500) / 500) × 100 = 10.0%
-STEP 6: Format = "10%" or "10.0%"
+STEP 5: Calculate = ((550 - 500) / 500) × 100 = 10.0
+STEP 6: Format = "10" (number only, no %)
 ```
 
-**Answer:** 10%
+**Answer:** 10
 
 ---
 
