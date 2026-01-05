@@ -49,19 +49,17 @@ def extract_answer(text: str) -> str:
 
 def ask_baseline(question: str, table: str, model: str = "claude-sonnet-4-5-20250929") -> str:
     """Baseline: direct question without skill enhancement."""
-    prompt = f"""Answer this question about the table below.
-
-Table:
+    prompt = f"""Table:
 {table}
 
 Question: {question}
 
-Output ONLY the final numeric answer. No explanation, no units, just the number.
-Example: 1251"""
+Reply with ONLY the number. Nothing else. No words, no explanation, no units.
+Just the number."""
 
     response = client.messages.create(
         model=model,
-        max_tokens=50,
+        max_tokens=30,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
