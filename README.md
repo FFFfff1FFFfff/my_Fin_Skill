@@ -10,20 +10,26 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on multiple
 | **TableBench** | Table QA | EM / EM±10% | table_reasoning |
 | **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
 
-## Quick Start
+## Usage
 
 ```bash
-pip install -r requirements.txt
-export ANTHROPIC_API_KEY="your-api-key"
+# FinQA - test with built-in samples
+python finqa/runner.py --source sample --limit 10
 
-# FinQA
-python finqa/runner.py --source sample
+# FinQA - test with dataset file
+python finqa/runner.py --source finqa_test.json --limit 50
 
-# TableBench
-python tablebench/runner.py --source sample
+# TableBench - test with built-in samples
+python tablebench/runner.py --source sample --limit 10
 
-# SealQA (with web search)
-python sealqa/runner.py --source sample --search --backend builtin
+# TableBench - load from HuggingFace
+python tablebench/runner.py --source hf --limit 50
+
+# SealQA - with web search enabled
+python sealqa/runner.py --source sample --limit 10 --search --backend builtin
+
+# SealQA - without web search
+python sealqa/runner.py --source sample --limit 10 --no-search
 ```
 
 ## Project Structure
@@ -40,14 +46,3 @@ python sealqa/runner.py --source sample --search --backend builtin
 │   └── conflicting_info_reasoner/
 └── skill_system.py     # Skill loader
 ```
-
-## Usage
-
-Each benchmark supports:
-- `--source`: Data source (`sample`, `hf`, or file path)
-- `--limit`: Number of samples
-- `--model`: Model to use (default: claude-sonnet-4-5-20250929)
-
-SealQA also supports:
-- `--search/--no-search`: Enable/disable web search
-- `--backend`: Search backend (`builtin`, `tavily`, `serper`)
