@@ -21,18 +21,23 @@ client = Anthropic()
 
 def ask_baseline(question: str, context: str, model: str = "claude-sonnet-4-5-20250929") -> str:
     """Baseline: direct question without skills. Outputs number only."""
-    prompt = f"""Answer this financial question. Reply with ONLY the final number.
+    prompt = f"""Answer this financial question.
 
 Data:
 {context}
 
 Question: {question}
 
-Number:"""
+Reply with ONLY the final number (no text, no units, no explanation).
+- For percentages: round to whole number or 1 decimal (e.g., "14" or "9.9")
+- For yes/no: reply "yes" or "no"
+- No symbols like % or $
+
+Answer:"""
 
     response = client.messages.create(
         model=model,
-        max_tokens=30,
+        max_tokens=20,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -96,11 +101,13 @@ Answer: [your final answer here]
 
 **Answer Format Requirements** (CRITICAL for correct evaluation):
 - Output ONLY the numeric value, no units or symbols
-- For percentages: output the number only (e.g., "14" not "14%" or "0.14")
+- For percentages: round to whole number or 1 decimal place (e.g., "14" or "9.9", NOT "14.46429")
 - For currency: output the number only (e.g., "1234" not "$1,234")
-- Round to at most 5 decimal places
-- No commas in numbers (e.g., "1234567" not "1,234,567")
-- For negative numbers: use minus sign (e.g., "-5")"""
+- No commas in numbers
+- For yes/no questions: reply "yes" or "no"
+- For negative numbers: use minus sign (e.g., "-5")
+
+**IMPORTANT**: Match the precision level typical in financial reporting. Don't over-precise."""
 
     messages = [{"role": "user", "content": prompt}]
 
