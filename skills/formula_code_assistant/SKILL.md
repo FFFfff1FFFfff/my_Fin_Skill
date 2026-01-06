@@ -1,4 +1,4 @@
-name	formula-code-assistant
+name	formula_code_assistant
 description	Generates formulas and executable code for complex financial calculations and verification
 
 # Formula & Code Assistant

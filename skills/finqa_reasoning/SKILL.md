@@ -1,4 +1,4 @@
-name	finqa-reasoning
+name	finqa_reasoning
 description	Step-by-step reasoning framework for financial question answering with systematic data extraction and calculation strategies
 
 # FinQA Reasoning Framework

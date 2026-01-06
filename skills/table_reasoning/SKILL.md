@@ -1,4 +1,4 @@
-name	table-reasoning
+name	table_reasoning
 description	Structured reasoning framework for table question answering with systematic data extraction and calculation strategies
 
 # Table Reasoning Framework

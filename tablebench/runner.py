@@ -118,8 +118,8 @@ def run_benchmark(source: str = "sample", limit: int = 50, model: str = "claude-
 
     # Load skill
     skill_manager = SkillManager()
-    skill_prompt = skill_manager.build_system_prompt(['table-reasoning'])
-    print(f"Loaded skill: table-reasoning")
+    skill_prompt = skill_manager.build_system_prompt(['table_reasoning'])
+    print(f"Loaded skill: table_reasoning")
 
     # Results storage
     results_baseline = []
