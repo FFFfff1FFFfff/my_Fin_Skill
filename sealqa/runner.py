@@ -119,7 +119,7 @@ Give a direct, concise answer."""
         return response.content[0].text.strip()
 
 
-def run_benchmark(source: str = "sample", limit: int = 50,
+def run_benchmark(source: str = "sample", limit: int = None,
                   use_search: bool = True, search_backend: str = "builtin",
                   model: str = "claude-sonnet-4-5-20250929",
                   grading_model: str = "claude-sonnet-4-5-20250929"):
@@ -264,7 +264,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SealQA Skill Benchmark")
     parser.add_argument("--source", type=str, default="sample",
                         help="Data source: 'sample', 'seal_0', 'seal_hard', 'longseal', or path")
-    parser.add_argument("--limit", type=int, default=50, help="Number of samples")
+    parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
     parser.add_argument("--search", action="store_true", default=True, help="Enable web search")
     parser.add_argument("--no-search", dest="search", action="store_false", help="Disable web search")
     parser.add_argument("--backend", type=str, default="builtin",

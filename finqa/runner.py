@@ -197,7 +197,7 @@ Answer: [your final answer here]
     return complete_response, final_answer
 
 
-def run_benchmark(source: str = "sample", limit: int = 50,
+def run_benchmark(source: str = "sample", limit: int = None,
                   model: str = "claude-sonnet-4-5-20250929"):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FinQA Skill Benchmark")
     parser.add_argument("--source", type=str, default="sample",
                         help="Data source: 'sample' or path to JSON file")
-    parser.add_argument("--limit", type=int, default=50, help="Number of samples")
+    parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929")
 
     args = parser.parse_args()

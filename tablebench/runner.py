@@ -95,7 +95,7 @@ Answer: [numeric value only, no units]"""
     return full_response, extracted
 
 
-def run_benchmark(source: str = "sample", limit: int = 50, model: str = "claude-sonnet-4-5-20250929"):
+def run_benchmark(source: str = "sample", limit: int = None, model: str = "claude-sonnet-4-5-20250929"):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
 
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="TableBench Skill Benchmark")
     parser.add_argument("--source", type=str, default="sample",
                         help="Data source: 'sample', 'huggingface', or path to local file")
-    parser.add_argument("--limit", type=int, default=50, help="Number of samples to test")
+    parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929", help="Model to use")
 
     args = parser.parse_args()
