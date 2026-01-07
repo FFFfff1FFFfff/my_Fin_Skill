@@ -1,12 +1,22 @@
-"""FinQA data loader - supports local JSON file"""
+"""FinQA data loader - supports official FinQA format"""
 
 import json
 import os
 from typing import Optional
 
 
+def format_table(table: list) -> str:
+    """Format table as readable string."""
+    if not table:
+        return ""
+    lines = []
+    for row in table:
+        lines.append(" | ".join(str(cell) for cell in row))
+    return "\n".join(lines)
+
+
 def load_from_json(file_path: str, limit: Optional[int] = None) -> list[dict]:
-    """Load from local JSON file."""
+    """Load from local JSON file (official FinQA format)."""
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -22,12 +32,33 @@ def load_from_json(file_path: str, limit: Optional[int] = None) -> list[dict]:
     for i, item in enumerate(items):
         if limit and len(samples) >= limit:
             break
-        samples.append({
-            "id": item.get("id", i),
-            "question": item.get("question", ""),
-            "context": item.get("context", ""),
-            "answer": item.get("answer", ""),
-        })
+
+        # Official FinQA format
+        if "qa" in item:
+            qa = item["qa"]
+            # Build context from pre_text, table, post_text
+            context_parts = []
+            if item.get("pre_text"):
+                context_parts.append("\n".join(item["pre_text"]))
+            if item.get("table"):
+                context_parts.append(format_table(item["table"]))
+            if item.get("post_text"):
+                context_parts.append("\n".join(item["post_text"]))
+
+            samples.append({
+                "id": item.get("id", i),
+                "question": qa.get("question", ""),
+                "context": "\n\n".join(context_parts),
+                "answer": str(qa.get("answer", "")),
+            })
+        # Simple format (question, context, answer at top level)
+        else:
+            samples.append({
+                "id": item.get("id", i),
+                "question": item.get("question", ""),
+                "context": item.get("context", ""),
+                "answer": str(item.get("answer", "")),
+            })
     return samples
 
 
@@ -77,8 +108,13 @@ def load_sample_data() -> list[dict]:
 
 
 if __name__ == "__main__":
-    print("Testing with sample data...")
-    samples = load_sample_data()
+    import sys
+    if len(sys.argv) > 1:
+        samples = load_finqa(sys.argv[1], limit=3)
+    else:
+        samples = load_sample_data()
     print(f"Loaded {len(samples)} samples")
     for s in samples:
-        print(f"  Q: {s['question'][:50]}... -> A: {s['answer']}")
+        print(f"\nQ: {s['question'][:80]}...")
+        print(f"A: {s['answer']}")
+        print(f"Context: {s['context'][:200]}...")
