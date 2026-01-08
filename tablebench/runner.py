@@ -22,6 +22,11 @@ client = Anthropic()
 
 def extract_answer(text: str) -> str:
     """Extract final answer from response."""
+    # Look for "Final Answer:" pattern (official format)
+    match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
     # Look for "Answer:" pattern
     match = re.search(r'Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
     if match:
@@ -48,18 +53,23 @@ def extract_answer(text: str) -> str:
 
 
 def ask_baseline(question: str, table: str, model: str = "claude-sonnet-4-5-20250929") -> str:
-    """Baseline: direct question without skill enhancement."""
-    prompt = f"""Table:
+    """Baseline: Direct Prompting (DP) matching official TableBench format."""
+    prompt = f"""You are a table analyst. Your task is to answer questions based on the table content.
+
+The answer should follow the format below:
+Final Answer: AnswerName1, AnswerName2...
+Answer should be a number or entity name, as short as possible, without any explanation.
+
+[TABLE]
 {table}
 
 Question: {question}
 
-Reply with ONLY the number. Nothing else. No words, no explanation, no units.
-Just the number."""
+Give the final answer to the question directly without any explanation."""
 
     response = client.messages.create(
         model=model,
-        max_tokens=30,
+        max_tokens=100,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -69,18 +79,20 @@ Just the number."""
 
 def ask_with_skill(question: str, table: str, skill_prompt: str,
                    model: str = "claude-sonnet-4-5-20250929") -> tuple[str, str]:
-    """With skill: question with skill-enhanced system prompt.
+    """With skill: TCoT-style reasoning with skill-enhanced system prompt.
 
     Returns:
         tuple: (full_response, extracted_answer)
     """
-    user_prompt = f"""Table:
+    user_prompt = f"""[TABLE]
 {table}
 
 Question: {question}
 
-Follow the reasoning framework. Show your work, then end with:
-Answer: [numeric value only, no units]"""
+Follow the reasoning framework above. Show your step-by-step reasoning, then end with:
+Final Answer: [your answer]
+
+The answer should be a number or entity name, as short as possible."""
 
     response = client.messages.create(
         model=model,
