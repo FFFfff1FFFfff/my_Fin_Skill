@@ -78,6 +78,60 @@ def pdf_to_base64(pdf_path: Path) -> Optional[str]:
         return None
 
 
+def pdf_to_images(pdf_path: Path, dpi: int = 144, max_pages: int = None) -> list[dict]:
+    """
+    Convert PDF pages to base64-encoded PNG images.
+
+    This matches the original MMLongBench-Doc evaluation approach which uses
+    page images instead of PDF documents.
+
+    Args:
+        pdf_path: Path to PDF file
+        dpi: Resolution for rendering (default 144 as in original paper)
+        max_pages: Maximum number of pages to convert (None for all)
+
+    Returns:
+        List of dicts with {"page": int, "image_base64": str, "media_type": "image/png"}
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("Warning: PyMuPDF (fitz) not installed. Run: pip install pymupdf")
+        return []
+
+    images = []
+    try:
+        doc = fitz.open(str(pdf_path))
+        total_pages = len(doc)
+
+        if max_pages:
+            total_pages = min(total_pages, max_pages)
+
+        zoom = dpi / 72  # 72 is PDF default DPI
+        matrix = fitz.Matrix(zoom, zoom)
+
+        for page_num in range(total_pages):
+            page = doc[page_num]
+            pix = page.get_pixmap(matrix=matrix)
+
+            # Convert to PNG bytes
+            png_bytes = pix.tobytes("png")
+            image_base64 = base64.standard_b64encode(png_bytes).decode('utf-8')
+
+            images.append({
+                "page": page_num + 1,
+                "image_base64": image_base64,
+                "media_type": "image/png"
+            })
+
+        doc.close()
+        return images
+
+    except Exception as e:
+        print(f"Failed to convert PDF to images {pdf_path}: {e}")
+        return []
+
+
 def parse_field(field_str: str):
     """Parse string representation of list/value."""
     if not field_str or field_str == "[]":

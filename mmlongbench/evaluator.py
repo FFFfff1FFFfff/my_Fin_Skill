@@ -6,6 +6,37 @@ from math import isclose
 from typing import Union
 
 
+def get_clean_string(s: str) -> str:
+    """
+    Clean string for comparison (matching official MMLongBench-Doc evaluation).
+
+    Removes quotes, parentheses, currency symbols, percentages, and common units.
+    """
+    if not s:
+        return ""
+
+    s = str(s).strip()
+
+    # Remove quotes
+    s = s.strip('"\'')
+
+    # Remove parentheses content if it's just a wrapper
+    if s.startswith('(') and s.endswith(')'):
+        s = s[1:-1]
+
+    # Remove leading currency symbols
+    s = re.sub(r'^[\$€£¥]', '', s)
+
+    # Remove trailing percentage
+    s = re.sub(r'%$', '', s)
+
+    # Remove trailing units (common ones from the paper)
+    units_pattern = r'\s*(miles|million|billion|thousand|percent|dollars|USD|EUR|GBP|kg|km|m|cm|mm|lb|oz|year|years|month|months|day|days)$'
+    s = re.sub(units_pattern, '', s, flags=re.IGNORECASE)
+
+    return s.strip()
+
+
 def levenshtein_distance(s1: str, s2: str) -> int:
     """Calculate the Levenshtein distance between two strings."""
     if len(s1) < len(s2):
@@ -27,7 +58,7 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return previous_row[-1]
 
 
-def anls_score(prediction: str, ground_truth: str, threshold: float = 0.5) -> float:
+def anls_score(prediction: str, ground_truth: str, threshold: float = 0.5, clean: bool = True) -> float:
     """
     Calculate ANLS (Average Normalized Levenshtein Similarity) score.
 
@@ -35,12 +66,17 @@ def anls_score(prediction: str, ground_truth: str, threshold: float = 0.5) -> fl
         prediction: Model prediction
         ground_truth: Ground truth answer
         threshold: Minimum similarity threshold (default: 0.5)
+        clean: Whether to apply string cleaning (default: True)
 
     Returns:
         Score between 0 and 1
     """
-    prediction = str(prediction).strip().lower()
-    ground_truth = str(ground_truth).strip().lower()
+    if clean:
+        prediction = get_clean_string(prediction).lower()
+        ground_truth = get_clean_string(ground_truth).lower()
+    else:
+        prediction = str(prediction).strip().lower()
+        ground_truth = str(ground_truth).strip().lower()
 
     if not ground_truth:
         return 1.0 if not prediction else 0.0
