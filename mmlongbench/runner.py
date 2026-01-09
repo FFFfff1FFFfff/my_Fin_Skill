@@ -220,41 +220,63 @@ def ask_with_skill(doc_content: any, question: str, answer_format: str,
         "None": "If the question cannot be answered, state 'Not answerable'."
     }.get(answer_format, "")
 
-    # Build text context if available
+    # Build SMART text context using keyword search
     text_context = ""
-    if extracted_text and "pages" in extracted_text:
-        # Include extracted text summary
-        text_preview = []
-        for page_num, text in sorted(extracted_text["pages"].items())[:20]:  # First 20 pages
-            preview = text[:500] if len(text) > 500 else text
-            text_preview.append(f"[Page {page_num}]: {preview}")
-        text_context = f"""
+    if extracted_text and "pages" in extracted_text and HAS_PDF_TOOLS:
+        # Extract keywords from question (simple approach: nouns and numbers)
+        import re
+        words = re.findall(r'\b[A-Za-z]{3,}\b|\b\d+\.?\d*\b', question)
+        keywords = [w.lower() for w in words if w.lower() not in
+                   {'what', 'which', 'where', 'when', 'how', 'many', 'much',
+                    'the', 'and', 'for', 'are', 'this', 'that', 'from', 'with',
+                    'does', 'did', 'was', 'were', 'have', 'has', 'been', 'being'}]
 
---- EXTRACTED TEXT (for reference) ---
-{chr(10).join(text_preview)}
---- END EXTRACTED TEXT ---
+        if keywords:
+            # Search for keywords in document
+            matches = search_in_pdf(extracted_text, ' '.join(keywords[:5]))
 
-Note: Use the extracted text above to help locate information. The PDF images provide visual details for charts, figures, and tables."""
+            if matches:
+                # Only include pages with matches, with full context
+                relevant_pages = []
+                seen_pages = set()
+                for match in matches[:10]:  # Top 10 matches
+                    page_num = match.get("page", 0)
+                    if page_num not in seen_pages:
+                        seen_pages.add(page_num)
+                        page_key = page_num if page_num in extracted_text["pages"] else str(page_num)
+                        if page_key in extracted_text["pages"]:
+                            page_text = extracted_text["pages"][page_key]
+                            # Include more text per page (up to 1500 chars)
+                            relevant_pages.append(f"[Page {page_num}]:\n{page_text[:1500]}")
 
-    prompt = f"""Based on the document above, answer the following question.
+                if relevant_pages:
+                    text_context = f"""
+
+--- RELEVANT TEXT SECTIONS (based on keyword search) ---
+{chr(10).join(relevant_pages[:5])}
+--- END RELEVANT SECTIONS ---
+"""
+
+    # Simpler, more focused prompt
+    prompt = f"""Based on the document above, answer this question:
 
 Question: {question}
 
 {format_hint}
 {text_context}
-
-Use the document analysis framework to:
-1. Identify relevant sections/pages in the document
-2. Extract the specific information needed
-3. Formulate your answer
-
-End your response with:
+Provide your answer. End with:
 Final Answer: [your answer]"""
 
+    # Use a simpler system prompt instead of the full skill framework
+    simple_skill_prompt = """You are a document analysis expert. Extract information accurately from the provided document.
+For questions about data: look for exact numbers, dates, and names.
+For list questions: identify all items that match the criteria.
+If information is not in the document, state "Not answerable"."""
+
     if use_images:
-        msg_data = create_images_message(doc_content, prompt, system_prompt=skill_prompt)
+        msg_data = create_images_message(doc_content, prompt, system_prompt=simple_skill_prompt)
     else:
-        msg_data = create_pdf_message(doc_content, prompt, system_prompt=skill_prompt)
+        msg_data = create_pdf_message(doc_content, prompt, system_prompt=simple_skill_prompt)
 
     response = client.messages.create(
         model=model,
