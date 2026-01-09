@@ -9,18 +9,13 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on multiple
 | **FinQA** | Financial QA | Exact match (5 decimals) | finqa_reasoning, formula_code_assistant |
 | **TableBench** | Table QA | EM / EM±10% | table_reasoning |
 | **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
+| **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_structure_navigator, document_evidence_reasoner |
 
 ## Usage
 
 ```bash
-# FinQA - test with built-in samples
-python finqa/runner.py --source sample --limit 10
-
 # FinQA - test with dataset file
-python finqa/runner.py --source finqa_test.json --limit 50
-
-# TableBench - test with built-in samples
-python tablebench/runner.py --source sample --limit 10
+python finqa/runner.py --source test.json --limit 50
 
 # TableBench - load from HuggingFace
 python tablebench/runner.py --source hf --limit 50
@@ -28,8 +23,11 @@ python tablebench/runner.py --source hf --limit 50
 # SealQA - with web search enabled
 python sealqa/runner.py --source sample --limit 10 --search --backend builtin
 
-# SealQA - without web search
-python sealqa/runner.py --source sample --limit 10 --no-search
+# MMLongBench-Doc - PDF document understanding
+python mmlongbench/runner.py --limit 10
+
+# MMLongBench-Doc - skip unanswerable questions
+python mmlongbench/runner.py --limit 50 --skip-unanswerable
 ```
 
 ## Project Structure
@@ -38,11 +36,14 @@ python sealqa/runner.py --source sample --limit 10 --no-search
 ├── finqa/              # FinQA benchmark
 ├── tablebench/         # TableBench benchmark
 ├── sealqa/             # SealQA benchmark
+├── mmlongbench/        # MMLongBench-Doc benchmark
 ├── skills/
 │   ├── finqa_reasoning/
 │   ├── formula_code_assistant/
 │   ├── table_reasoning/
 │   ├── web_search_tool/
-│   └── conflicting_info_reasoner/
+│   ├── conflicting_info_reasoner/
+│   ├── pdf_structure_navigator/      # (TODO)
+│   └── document_evidence_reasoner/   # (TODO)
 └── skill_system.py     # Skill loader
 ```
