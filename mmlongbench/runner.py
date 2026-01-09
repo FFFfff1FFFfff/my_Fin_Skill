@@ -153,9 +153,9 @@ def run_benchmark(limit: int = None,
         samples = load_mmlongbench(limit=limit, skip_unanswerable=skip_unanswerable)
     print(f"Loaded {len(samples)} samples")
 
-    # Load skills (placeholder - skills to be added later)
+    # Load skills
     skill_manager = SkillManager()
-    skill_names = ['pdf_structure_navigator', 'document_evidence_reasoner']
+    skill_names = ['pdf_document_qa']
 
     # Check if skills exist
     available_skills = skill_manager.list_skills()
