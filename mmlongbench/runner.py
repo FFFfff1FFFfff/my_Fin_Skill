@@ -12,9 +12,16 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from anthropic import Anthropic
-from data_loader import load_mmlongbench, load_sample_data, download_pdf, pdf_to_base64
+from data_loader import load_mmlongbench, load_sample_data, download_pdf, pdf_to_base64, PDF_CACHE_DIR
 from evaluator import eval_score, evaluate_batch
 from skill_system import SkillManager
+
+# Import PDF text extraction tools
+try:
+    from skills.pdf_text_extractor.pdf_tools import extract_pdf_text, search_in_pdf
+    HAS_PDF_TOOLS = True
+except ImportError:
+    HAS_PDF_TOOLS = False
 
 client = Anthropic()
 
@@ -76,9 +83,10 @@ Final Answer:"""
 
 
 def ask_with_skill(pdf_base64: str, question: str, answer_format: str,
-                   skill_prompt: str, model: str = "claude-sonnet-4-5-20250929") -> tuple[str, str]:
+                   skill_prompt: str, model: str = "claude-sonnet-4-5-20250929",
+                   extracted_text: dict = None) -> tuple[str, str]:
     """
-    Answer with skill enhancement.
+    Answer with skill enhancement, optionally including extracted text.
 
     Returns:
         tuple: (full_response, extracted_answer)
@@ -91,11 +99,28 @@ def ask_with_skill(pdf_base64: str, question: str, answer_format: str,
         "None": "If the question cannot be answered, state 'Not answerable'."
     }.get(answer_format, "")
 
+    # Build text context if available
+    text_context = ""
+    if extracted_text and "pages" in extracted_text:
+        # Include extracted text summary
+        text_preview = []
+        for page_num, text in sorted(extracted_text["pages"].items())[:20]:  # First 20 pages
+            preview = text[:500] if len(text) > 500 else text
+            text_preview.append(f"[Page {page_num}]: {preview}")
+        text_context = f"""
+
+--- EXTRACTED TEXT (for reference) ---
+{chr(10).join(text_preview)}
+--- END EXTRACTED TEXT ---
+
+Note: Use the extracted text above to help locate information. The PDF images provide visual details for charts, figures, and tables."""
+
     prompt = f"""Based on the PDF document above, answer the following question.
 
 Question: {question}
 
 {format_hint}
+{text_context}
 
 Use the document analysis framework to:
 1. Identify relevant sections/pages in the document
@@ -157,7 +182,7 @@ def run_benchmark(limit: int = None,
 
     # Load skills
     skill_manager = SkillManager()
-    skill_names = ['pdf_document_qa']
+    skill_names = ['pdf_document_qa', 'pdf_text_extractor']
 
     # Check if skills exist
     available_skills = skill_manager.list_skills()
@@ -174,20 +199,29 @@ def run_benchmark(limit: int = None,
     unique_pdfs = set(s["doc_id"] for s in samples)
     print(f"Unique PDFs to process: {len(unique_pdfs)}")
 
-    # Download PDFs and cache
+    # Download PDFs and cache (both base64 and extracted text)
     print("\nDownloading PDFs...")
     pdf_cache = {}
+    text_cache = {}
     for doc_id in unique_pdfs:
         pdf_path = download_pdf(doc_id)
         if pdf_path:
             pdf_base64 = pdf_to_base64(pdf_path)
             if pdf_base64:
                 pdf_cache[doc_id] = pdf_base64
+                # Also extract text if tools available
+                if HAS_PDF_TOOLS:
+                    extracted = extract_pdf_text(str(pdf_path))
+                    if "error" not in extracted:
+                        text_cache[doc_id] = extracted
                 print(f"  ✓ {doc_id}")
             else:
                 print(f"  ✗ {doc_id} (failed to read)")
         else:
             print(f"  ✗ {doc_id} (download failed)")
+
+    if HAS_PDF_TOOLS and text_cache:
+        print(f"Extracted text from {len(text_cache)} PDFs")
 
     # Filter samples to only those with available PDFs
     samples = [s for s in samples if s["doc_id"] in pdf_cache]
@@ -237,8 +271,10 @@ def run_benchmark(limit: int = None,
         # With skill (if available)
         if skill_prompt:
             try:
+                extracted_text = text_cache.get(doc_id)
                 full_response, pred_skill = ask_with_skill(
-                    pdf_base64, question, answer_format, skill_prompt, model
+                    pdf_base64, question, answer_format, skill_prompt, model,
+                    extracted_text=extracted_text
                 )
                 score_skill = eval_score(pred_skill, answer, answer_format)
                 print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f}")

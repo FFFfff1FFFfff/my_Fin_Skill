@@ -9,7 +9,7 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on multiple
 | **FinQA** | Financial QA | Exact match (5 decimals) | finqa_reasoning, formula_code_assistant |
 | **TableBench** | Table QA | EM / EM±10% | table_reasoning |
 | **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
-| **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa |
+| **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa, pdf_text_extractor |
 
 ## Usage
 
@@ -43,6 +43,7 @@ python mmlongbench/runner.py --limit 50 --skip-unanswerable
 │   ├── table_reasoning/
 │   ├── web_search_tool/
 │   ├── conflicting_info_reasoner/
-│   └── pdf_document_qa/
+│   ├── pdf_document_qa/
+│   └── pdf_text_extractor/
 └── skill_system.py     # Skill loader
 ```
