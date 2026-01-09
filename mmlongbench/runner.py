@@ -45,32 +45,34 @@ def create_pdf_message(pdf_base64: str, question: str, system_prompt: str = None
 def ask_baseline(pdf_base64: str, question: str, answer_format: str,
                  model: str = "claude-sonnet-4-5-20250929") -> str:
     """Baseline: direct question without skills."""
-    format_hint = {
-        "Int": "Reply with only the integer number.",
-        "Float": "Reply with only the number (can include decimals).",
-        "Str": "Reply with a concise answer.",
-        "List": "Reply with a list in format: ['item1', 'item2', ...]",
-        "None": "If the question cannot be answered from the document, reply 'Not answerable'."
-    }.get(answer_format, "Reply concisely.")
+    format_instruction = {
+        "Int": "Answer with ONLY the integer number, nothing else.",
+        "Float": "Answer with ONLY the number, nothing else.",
+        "Str": "Answer as concisely as possible - just the answer, no explanation.",
+        "List": "Answer with ONLY a list like: ['item1', 'item2']",
+        "None": "If not answerable from the document, reply ONLY: Not answerable"
+    }.get(answer_format, "Answer concisely.")
 
-    prompt = f"""Based on the PDF document above, answer the following question.
+    prompt = f"""Question: {question}
 
-Question: {question}
+{format_instruction}
 
-{format_hint}
-
-Answer:"""
+Final Answer:"""
 
     msg_data = create_pdf_message(pdf_base64, prompt)
 
     response = client.messages.create(
         model=model,
-        max_tokens=256,
+        max_tokens=100,
         temperature=0,
         messages=msg_data["messages"]
     )
 
-    return response.content[0].text.strip()
+    raw = response.content[0].text.strip()
+
+    # Extract just the answer (remove any explanation)
+    lines = raw.split('\n')
+    return lines[0].strip()
 
 
 def ask_with_skill(pdf_base64: str, question: str, answer_format: str,
