@@ -48,13 +48,28 @@ def load_chartqapro(limit: Optional[int] = None,
 
         # Convert image to base64
         image = item.get("image")
+        image_base64 = None
         if image is not None:
-            # PIL Image to base64
-            buffered = io.BytesIO()
-            image.save(buffered, format="PNG")
-            image_base64 = base64.standard_b64encode(buffered.getvalue()).decode('utf-8')
-        else:
-            image_base64 = None
+            try:
+                # HuggingFace datasets often return PIL Image directly
+                from PIL import Image as PILImage
+                if isinstance(image, PILImage.Image):
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
+                    image_base64 = base64.standard_b64encode(buffered.getvalue()).decode('utf-8')
+                elif isinstance(image, bytes):
+                    image_base64 = base64.standard_b64encode(image).decode('utf-8')
+                elif isinstance(image, dict) and 'bytes' in image:
+                    # Some HF datasets store as {'bytes': ..., 'path': ...}
+                    image_base64 = base64.standard_b64encode(image['bytes']).decode('utf-8')
+                elif hasattr(image, 'save'):
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
+                    image_base64 = base64.standard_b64encode(buffered.getvalue()).decode('utf-8')
+                else:
+                    print(f"Unknown image type {i}: {type(image)}")
+            except Exception as e:
+                print(f"Failed to convert image {i}: {e}")
 
         # Get questions and answers (can be lists for conversational)
         questions = item.get("Question", [])
