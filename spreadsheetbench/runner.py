@@ -743,7 +743,7 @@ def run_benchmark(
         print(f"Answer Position: {sample['answer_position']}")
         print(f"Test Cases: {len(sample['test_cases'])}")
 
-        sample_output_dir = os.path.join(output_dir, sample['id'])
+        sample_output_dir = os.path.join(output_dir, str(sample['id']))
         os.makedirs(sample_output_dir, exist_ok=True)
 
         # Get first test case for ReAct execution feedback
