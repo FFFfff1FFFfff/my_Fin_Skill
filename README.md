@@ -10,6 +10,7 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on multiple
 | **TableBench** | Table QA | EM / EM±10% | table_reasoning |
 | **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
 | **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa, pdf_text_extractor |
+| **ChartQAPro** | Chart QA | Relaxed Accuracy (5% tolerance) | chart_data_extractor (TODO) |
 
 ## Usage
 
@@ -28,6 +29,12 @@ python mmlongbench/runner.py --limit 10
 
 # MMLongBench-Doc - skip unanswerable questions
 python mmlongbench/runner.py --limit 50 --skip-unanswerable
+
+# ChartQAPro - chart question answering
+python chartqapro/runner.py --limit 50
+
+# ChartQAPro - filter by question type
+python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
 ```
 
 ## Project Structure
@@ -37,6 +44,7 @@ python mmlongbench/runner.py --limit 50 --skip-unanswerable
 ├── tablebench/         # TableBench benchmark
 ├── sealqa/             # SealQA benchmark
 ├── mmlongbench/        # MMLongBench-Doc benchmark
+├── chartqapro/         # ChartQAPro benchmark
 ├── skills/
 │   ├── finqa_reasoning/
 │   ├── formula_code_assistant/
