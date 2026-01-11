@@ -1,157 +1,69 @@
-# FinQA Skills Evaluation
+# Skill Benchmark
 
-Benchmark comparing Claude's baseline vs skill-augmented performance on financial question answering.
+Benchmark comparing Claude's baseline vs skill-augmented performance on multiple QA tasks.
 
+## Benchmarks
 
-
-## Results
-
-
-Using the first 100 samples from the FinQA test dataset:
- 
-
-- **Baseline**: 63% accuracy
-
-- **With Skills**: 72% accuracy
-
- 
-
-## Dataset
-
-
-- **Source**: FinQA test set (first 100 samples)
-
-- **Tasks**: Financial QA requiring percentage calculations, changes, multi-step arithmetic, and table data extraction
-
- 
-
-## Skills
-
-
-### 1. finqa-reasoning
-
-
-6-step systematic reasoning framework for financial questions:
-
-- Question type identification
-
-- Data location and extraction
-
-- Data verification (units, time periods)
-
-- Formula selection
-
-- Calculation
-
-- Answer formatting
-
- 
-
-### 2. formula-code-assistant
-
-
-Three calculation tools for complex computations:
-
-- `generate_calculation_formula()` - Step-by-step formula breakdowns
-
-- `generate_python_code()` - Executable Python code generation
-
-- `execute_calculation()` - Python expression execution
-
- 
-
-
-## Methodology
-
-
-1. **Baseline**: Direct prompting with minimal guidance
-
-2. **With Skills**: Claude receives skill documentation + access to calculation tools via Anthropic API
-
-3. **Evaluation**: LLM judge compares predictions to ground truth
-
- 
-
-**LLM Judge Caveat**: Automated judge struggles with decimal precision, percentage formatting, and rounding variations. Results were manually verified for accuracy.
-
- 
-
-## Installation
-
- 
-
-```bash
-
-pip install -r requirements.txt
-
-export ANTHROPIC_API_KEY="your-api-key"
-
-```
-
- 
+| Benchmark | Task | Evaluation | Skills |
+|-----------|------|------------|--------|
+| **FinQA** | Financial QA | Exact match (5 decimals) | finqa_reasoning, formula_code_assistant |
+| **TableBench** | Table QA | EM / EM±10% | table_reasoning |
+| **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
+| **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa, pdf_text_extractor |
+| **ChartQAPro** | Chart QA | Relaxed Accuracy (5% tolerance) | chart_data_extractor |
+| **SpreadsheetBench** | Spreadsheet Manipulation | OJ-style (Soft/Hard Restriction) | spreadsheet_schema_analyzer |
 
 ## Usage
 
- 
-
 ```bash
+# FinQA - test with dataset file
+python finqa/runner.py --source test.json --limit 50
 
-# Test samples 1-10 (default)
+# TableBench - load from HuggingFace
+python tablebench/runner.py --source hf --limit 50
 
-python compare_with_tools.py
+# SealQA - with web search enabled
+python sealqa/runner.py --source sample --limit 10 --search --backend builtin
 
+# MMLongBench-Doc - PDF document understanding
+python mmlongbench/runner.py --limit 10
 
+# MMLongBench-Doc - skip unanswerable questions
+python mmlongbench/runner.py --limit 50 --skip-unanswerable
 
-# Test 50 samples
+# ChartQAPro - chart question answering
+python chartqapro/runner.py --limit 50
 
-python compare_with_tools.py --start 0 --limit 50
+# ChartQAPro - filter by question type
+python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
 
+# SpreadsheetBench - spreadsheet manipulation
+python spreadsheetbench/runner.py --limit 20 --mode baseline
+python spreadsheetbench/runner.py --limit 20 --mode react --max-turns 5
+
+# SpreadsheetBench - filter by instruction type
+python spreadsheetbench/runner.py --limit 50 --cell-level
+python spreadsheetbench/runner.py --limit 50 --sheet-level
 ```
-
- 
-
-**Options**:
-
-- `--dataset`: Dataset path (default: `finqa_test.json`)
-
-- `--start`: Start index, 0-based (default: `0`)
-
-- `--end`: End index, exclusive (default: `10`)
-
-- `--limit`: Number of samples (alternative to `--end`)
-
- 
-
-## Output Files
-
- 
-
-- `results_baseline_{range}.txt` - Baseline predictions
-
-- `results_with_skills_{range}.txt` - Skills predictions with reasoning traces
-
- 
 
 ## Project Structure
 
- 
-
 ```
-
-my_Fin_Skill/
-
+├── finqa/              # FinQA benchmark
+├── tablebench/         # TableBench benchmark
+├── sealqa/             # SealQA benchmark
+├── mmlongbench/        # MMLongBench-Doc benchmark
+├── chartqapro/         # ChartQAPro benchmark
+├── spreadsheetbench/   # SpreadsheetBench benchmark
 ├── skills/
-
-│   ├── finqa-reasoning/SKILL.md
-
-│   └── formula-code-assistant/
-
-│       ├── SKILL.md
-
-│       └── calculation_tools.py
-
-├── compare_with_tools.py        # Main evaluation script
-
-├── skill_system.py              # Skill loader and manager
-
-└── finqa_test.json              # Dataset
+│   ├── finqa_reasoning/
+│   ├── formula_code_assistant/
+│   ├── table_reasoning/
+│   ├── web_search_tool/
+│   ├── conflicting_info_reasoner/
+│   ├── pdf_document_qa/
+│   ├── pdf_text_extractor/
+│   ├── chart_data_extractor/
+│   └── spreadsheet_schema_analyzer/
+└── skill_system.py     # Skill loader
+```

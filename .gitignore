@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+tablebench_results_*.json
+sealqa_results_*.json
+finqa_results_*.json
+mmlongbench_results_*.json
+mmlongbench/cache/
+results_*.json
+results_*.txt
+*.jsonl
+test.json
