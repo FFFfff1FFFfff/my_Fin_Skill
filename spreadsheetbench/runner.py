@@ -240,8 +240,14 @@ def run_benchmark(
     print("=" * 60)
     print(f"Model: {model}")
     print(f"Mode: {mode}")
-    if mode == "react":
+    if mode in ["react", "all"]:
         print(f"Max turns: {max_turns}")
+
+    # Determine which modes to run
+    if mode == "all":
+        modes_to_run = ["baseline", "react"]
+    else:
+        modes_to_run = [mode]
 
     # Load data
     if use_sample:
@@ -264,8 +270,9 @@ def run_benchmark(
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output: {output_dir}")
 
-    results = []
-    total_turns = 0
+    # Results storage per mode
+    all_results = {m: [] for m in modes_to_run}
+    total_turns = {m: 0 for m in modes_to_run}
 
     for i, sample in enumerate(samples):
         print(f"\n[{i+1}/{len(samples)}] ID: {sample['id']}")
@@ -283,67 +290,84 @@ def run_benchmark(
             test_input = tc['input_file']
             test_output = os.path.join(sample_dir, "test_output.xlsx")
 
-        try:
-            if mode == "baseline":
-                code = generate_baseline(sample, model=model)
-                turns = 1
-            else:  # react
-                code, turns = generate_react(
-                    sample, model=model, max_turns=max_turns,
-                    test_input=test_input, test_output=test_output,
-                )
+        for run_mode in modes_to_run:
+            try:
+                if run_mode == "baseline":
+                    code = generate_baseline(sample, model=model)
+                    turns = 1
+                else:  # react
+                    code, turns = generate_react(
+                        sample, model=model, max_turns=max_turns,
+                        test_input=test_input, test_output=test_output,
+                    )
 
-            total_turns += turns
+                total_turns[run_mode] += turns
 
-            # Save code
-            with open(os.path.join(sample_dir, "code.py"), "w") as f:
-                f.write(code)
+                # Save code
+                with open(os.path.join(sample_dir, f"{run_mode}_code.py"), "w") as f:
+                    f.write(code)
 
-            # Evaluate
-            if sample['test_cases']:
-                eval_result = evaluate_instruction(
-                    code=code,
-                    test_cases=sample['test_cases'],
-                    answer_position=sample['answer_position'],
-                    output_dir=sample_dir,
-                )
-                eval_result["id"] = sample["id"]
-                eval_result["instruction_type"] = sample["instruction_type"]
-                eval_result["turns"] = turns
-                eval_result["code_length"] = len(code)
-                results.append(eval_result)
+                # Evaluate
+                if sample['test_cases']:
+                    eval_result = evaluate_instruction(
+                        code=code,
+                        test_cases=sample['test_cases'],
+                        answer_position=sample['answer_position'],
+                        output_dir=sample_dir,
+                    )
+                    eval_result["id"] = sample["id"]
+                    eval_result["instruction_type"] = sample["instruction_type"]
+                    eval_result["turns"] = turns
+                    eval_result["code_length"] = len(code)
+                    all_results[run_mode].append(eval_result)
 
-                status = "✓" if eval_result["hard_restriction"] == 1 else "✗"
-                print(f"  {status} Soft: {eval_result['soft_restriction']:.0%}, Hard: {eval_result['hard_restriction']}, Turns: {turns}")
-            else:
-                print(f"  (No test cases)")
+                    status = "✓" if eval_result["hard_restriction"] == 1 else "✗"
+                    print(f"  [{run_mode}] {status} Soft: {eval_result['soft_restriction']:.0%}, Hard: {eval_result['hard_restriction']}, Turns: {turns}")
+                else:
+                    print(f"  [{run_mode}] (No test cases)")
 
-        except Exception as e:
-            print(f"  ERROR: {e}")
-            if sample['test_cases']:
-                results.append({
-                    "id": sample["id"],
-                    "instruction_type": sample["instruction_type"],
-                    "soft_restriction": 0.0,
-                    "hard_restriction": 0,
-                    "error": str(e),
-                })
+            except Exception as e:
+                print(f"  [{run_mode}] ERROR: {e}")
+                if sample['test_cases']:
+                    all_results[run_mode].append({
+                        "id": sample["id"],
+                        "instruction_type": sample["instruction_type"],
+                        "soft_restriction": 0.0,
+                        "hard_restriction": 0,
+                        "error": str(e),
+                    })
 
     # Summary
     print("\n" + "=" * 60)
     print("RESULTS")
     print("=" * 60)
 
-    if results:
-        metrics = calculate_metrics(results)
-        print(f"Soft Restriction: {metrics['soft_restriction_avg']:.1%}")
-        print(f"Hard Restriction: {metrics['hard_restriction_avg']:.1%}")
-        print(f"Avg Turns: {total_turns / len(samples):.1f}")
+    metrics_by_mode = {}
+    for run_mode in modes_to_run:
+        results = all_results[run_mode]
+        if results:
+            metrics = calculate_metrics(results)
+            metrics_by_mode[run_mode] = metrics
+            print(f"\n[{run_mode.upper()}]")
+            print(f"  Soft Restriction: {metrics['soft_restriction_avg']:.1%}")
+            print(f"  Hard Restriction: {metrics['hard_restriction_avg']:.1%}")
+            print(f"  Avg Turns: {total_turns[run_mode] / len(samples):.1f}")
 
-        if metrics['by_type']:
-            print("\nBy Type:")
-            for t, d in metrics['by_type'].items():
-                print(f"  {t}: Soft={d['soft_restriction_avg']:.1%}, Hard={d['hard_restriction_avg']:.1%}")
+            if metrics['by_type']:
+                for t, d in metrics['by_type'].items():
+                    print(f"    {t}: Soft={d['soft_restriction_avg']:.1%}, Hard={d['hard_restriction_avg']:.1%}")
+
+    # Comparison if running both
+    if len(modes_to_run) > 1 and "baseline" in metrics_by_mode and "react" in metrics_by_mode:
+        print("\n" + "-" * 40)
+        print("COMPARISON (react vs baseline)")
+        print("-" * 40)
+        base = metrics_by_mode["baseline"]
+        react = metrics_by_mode["react"]
+        soft_diff = react['soft_restriction_avg'] - base['soft_restriction_avg']
+        hard_diff = react['hard_restriction_avg'] - base['hard_restriction_avg']
+        print(f"  Soft: {soft_diff:+.1%}")
+        print(f"  Hard: {hard_diff:+.1%}")
 
     # Save
     with open(os.path.join(output_dir, "results.json"), "w") as f:
@@ -352,8 +376,8 @@ def run_benchmark(
             "mode": mode,
             "max_turns": max_turns,
             "timestamp": datetime.now().isoformat(),
-            "results": results,
-            "metrics": calculate_metrics(results) if results else None,
+            "results": all_results,
+            "metrics": metrics_by_mode,
         }, f, indent=2, default=str)
 
     print(f"\nSaved to: {output_dir}")
@@ -363,7 +387,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
-    parser.add_argument("--mode", type=str, default="baseline", choices=["baseline", "react"])
+    parser.add_argument("--mode", type=str, default="baseline", choices=["baseline", "react", "all"])
     parser.add_argument("--max-turns", type=int, default=5)
     parser.add_argument("--sample", action="store_true")
     parser.add_argument("--data-dir", type=str, default=None)
