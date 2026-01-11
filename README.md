@@ -43,6 +43,7 @@ python spreadsheetbench/runner.py --limit 10
 # SpreadsheetBench - specific modes
 python spreadsheetbench/runner.py --limit 50 --mode baseline    # Single-round (original paper)
 python spreadsheetbench/runner.py --limit 50 --mode react       # Multi-round with error feedback
+python spreadsheetbench/runner.py --limit 50 --mode explore     # Code-based exploration (paper's key insight)
 python spreadsheetbench/runner.py --limit 50 --mode schema      # Schema-first analysis
 python spreadsheetbench/runner.py --limit 50 --mode combined    # Schema + ReAct
 

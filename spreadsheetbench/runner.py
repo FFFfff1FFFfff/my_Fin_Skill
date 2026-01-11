@@ -2,15 +2,20 @@
 """
 Runner for SpreadsheetBench benchmark.
 
-Implements three approaches:
+Implements five approaches:
 1. Baseline (Single-round): Direct code generation matching original paper
 2. ReAct (Multi-round): Execute → Error Feedback → Fix → Repeat (original paper's approach)
-3. Schema-First: Analyze structure → Generate robust code (our skill)
+3. Explore (Code-based): NO static preview → Model explores via code → Sees real output → Generates solution
+4. Schema-First: Static text analysis → Generate robust code
+5. Combined: Schema + ReAct refinement
+
+Key insight from paper: Static text preview has limited effect. Letting the model
+explore the real Excel structure via code execution is more effective.
 
 Usage:
     python runner.py --limit 10
     python runner.py --limit 50 --mode react --max-turns 3
-    python runner.py --limit 50 --mode schema
+    python runner.py --limit 50 --mode explore  # Paper's recommended approach
     python runner.py --sample
 """
 
@@ -298,6 +303,182 @@ def generate_react_code(
 
 
 # =============================================================================
+# EXPLORE: Code-based exploration (paper's key insight - NO static preview)
+# =============================================================================
+
+PROMPT_EXPLORE_INITIAL = """You are a spreadsheet expert who manipulates spreadsheets through Python code using openpyxl.
+
+## Task Information
+1. Instruction: {instruction}
+2. Instruction type: {instruction_type}
+3. Answer position: {answer_position}
+4. File path: file_path (variable already set)
+
+**IMPORTANT**: You have NOT been given a preview of the spreadsheet content.
+You should first generate Python code to EXPLORE the spreadsheet structure:
+- Check sheet names
+- Check dimensions (max_row, max_column)
+- Print first few rows to understand the data layout
+- Identify headers and data types
+- Look for any special structures (merged cells, multiple tables, etc.)
+
+Generate exploration code that prints useful information about the spreadsheet:
+
+```python
+"""
+
+PROMPT_EXPLORE_SOLVE = """Based on your exploration, here is what you discovered about the spreadsheet:
+
+{exploration_output}
+
+Now generate the FINAL SOLUTION code to accomplish the task:
+- Instruction: {instruction}
+- Answer position: {answer_position}
+
+Requirements:
+- Use dynamic finding (no hardcoded row/column numbers)
+- Handle varying data lengths (use max_row, not fixed ranges)
+- The same code will run on 3 different test cases with different data
+
+Generate the solution code:
+
+```python
+"""
+
+
+def generate_explore_code(
+    sample: dict,
+    model: str = DEFAULT_MODEL,
+    max_turns: int = 3,
+    test_input_path: str = None,
+    test_output_path: str = None,
+) -> tuple:
+    """
+    Explore-then-solve approach (paper's key insight).
+
+    Stage 1: Model generates exploration code (no static preview given)
+    Stage 2: Execute exploration, show real output
+    Stage 3: Model generates solution based on real exploration
+    Stage 4: ReAct refinement if needed
+
+    Returns (final_code, {"exploration_output": ..., "conversation": ...})
+    """
+    messages = []
+    conversation = []
+
+    # Stage 1: Exploration prompt (NO static preview)
+    explore_prompt = PROMPT_EXPLORE_INITIAL.format(
+        instruction=sample["instruction"],
+        instruction_type=sample["instruction_type"],
+        answer_position=sample["answer_position"],
+    )
+
+    messages.append({"role": "user", "content": explore_prompt})
+    conversation.append({"role": "user", "content": explore_prompt})
+
+    # Get exploration code
+    response = call_claude(messages, model=model)
+    explore_code = extract_code(response)
+
+    messages.append({"role": "assistant", "content": response})
+    conversation.append({"role": "assistant", "content": response, "code": explore_code})
+
+    # Execute exploration code
+    exploration_output = ""
+    if test_input_path and test_output_path:
+        # Create a modified exploration code that prints but doesn't modify
+        safe_explore_code = f'''
+from openpyxl import load_workbook
+
+wb = load_workbook(file_path)
+print("=== SPREADSHEET EXPLORATION ===")
+print(f"Sheet names: {{wb.sheetnames}}")
+
+for sheet_name in wb.sheetnames[:3]:  # Limit to first 3 sheets
+    ws = wb[sheet_name]
+    print(f"\\n=== Sheet: {{sheet_name}} ===")
+    print(f"Dimensions: {{ws.max_row}} rows x {{ws.max_column}} columns")
+
+    # Print first 10 rows
+    print("\\nFirst 10 rows:")
+    for row in range(1, min(11, ws.max_row + 1)):
+        row_data = []
+        for col in range(1, min(ws.max_column + 1, 20)):  # Limit columns too
+            val = ws.cell(row, col).value
+            row_data.append(str(val) if val is not None else "")
+        print(f"  Row {{row}}: {{row_data}}")
+
+wb.close()
+'''
+        # Also try to run the model's exploration code
+        exec_result = execute_code(explore_code, test_input_path, test_output_path)
+        if exec_result["success"]:
+            exploration_output = exec_result.get("output", "")
+        else:
+            # If model's code failed, use our safe exploration
+            exec_result2 = execute_code(safe_explore_code, test_input_path, test_output_path)
+            if exec_result2["success"]:
+                exploration_output = exec_result2.get("output", "")
+            else:
+                exploration_output = f"Exploration failed: {exec_result['error']}"
+
+        conversation.append({"role": "execution", "output": exploration_output})
+    else:
+        exploration_output = "(No execution available - using static preview)\n" + sample.get("preview", "")
+
+    # Stage 2: Generate solution based on exploration
+    solve_prompt = PROMPT_EXPLORE_SOLVE.format(
+        exploration_output=exploration_output[:3000],  # Limit size
+        instruction=sample["instruction"],
+        answer_position=sample["answer_position"],
+    )
+
+    messages.append({"role": "user", "content": solve_prompt})
+    conversation.append({"role": "user", "content": solve_prompt})
+
+    # Get solution and refine with ReAct
+    final_code = None
+
+    for turn in range(max_turns):
+        response = call_claude(messages, model=model)
+        code = extract_code(response)
+
+        messages.append({"role": "assistant", "content": response})
+        conversation.append({"role": "assistant", "content": response, "code": code})
+
+        final_code = code
+
+        # Execute and get feedback
+        if test_input_path and test_output_path:
+            exec_result = execute_code(code, test_input_path, test_output_path)
+
+            if exec_result["success"]:
+                conversation.append({"role": "execution", "success": True})
+                break
+            else:
+                error = exec_result["error"]
+                conversation.append({"role": "execution", "success": False, "error": error})
+
+                continue_prompt = f"""The code execution failed with error:
+
+{error}
+
+Please fix the code. Remember what you learned from exploring the spreadsheet:
+{exploration_output[:1000]}
+
+Generate fixed code:
+
+```python
+"""
+                messages.append({"role": "user", "content": continue_prompt})
+                conversation.append({"role": "user", "content": continue_prompt})
+        else:
+            break
+
+    return final_code, {"exploration_output": exploration_output, "conversation": conversation}
+
+
+# =============================================================================
 # SCHEMA-FIRST: Analyze structure then generate robust code (our skill)
 # =============================================================================
 
@@ -510,7 +691,7 @@ Please fix the code based on the traceback. Remember to:
 def run_benchmark(
     limit: int = None,
     model: str = DEFAULT_MODEL,
-    mode: str = "all",  # "baseline", "react", "schema", "combined", "all"
+    mode: str = "all",  # "baseline", "react", "explore", "schema", "combined", "all"
     max_turns: int = 3,
     use_sample: bool = False,
     data_dir: str = None,
@@ -524,8 +705,8 @@ def run_benchmark(
     print("=" * 70)
     print(f"\nModel: {model}")
     print(f"Mode: {mode}")
-    if mode in ["react", "combined", "all"]:
-        print(f"Max turns for ReAct: {max_turns}")
+    if mode in ["react", "explore", "combined", "all"]:
+        print(f"Max turns: {max_turns}")
 
     # Load data
     print(f"\nLoading data (limit={limit})...")
@@ -550,8 +731,8 @@ def run_benchmark(
     print(f"Output directory: {output_dir}")
 
     # Results storage
-    results = {m: [] for m in ["baseline", "react", "schema", "combined"]}
-    modes_to_run = ["baseline", "react", "schema", "combined"] if mode == "all" else [mode]
+    results = {m: [] for m in ["baseline", "react", "explore", "schema", "combined"]}
+    modes_to_run = ["baseline", "react", "explore", "schema", "combined"] if mode == "all" else [mode]
 
     # Process each sample
     for i, sample in enumerate(samples):
@@ -587,6 +768,16 @@ def run_benchmark(
                         test_input_path=test_input, test_output_path=test_output,
                     )
                     extra_info = {"conversation_turns": len([c for c in conv if c["role"] == "assistant"])}
+
+                elif run_mode == "explore":
+                    code, info = generate_explore_code(
+                        sample, model=model, max_turns=max_turns,
+                        test_input_path=test_input, test_output_path=test_output,
+                    )
+                    extra_info = {
+                        "exploration_output": info["exploration_output"][:500],
+                        "turns": len([c for c in info["conversation"] if c["role"] == "assistant"]),
+                    }
 
                 elif run_mode == "schema":
                     code, schema = generate_schema_code(sample, model=model)
@@ -685,7 +876,7 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="Limit number of samples")
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Model to use")
     parser.add_argument("--mode", type=str, default="all",
-                        choices=["baseline", "react", "schema", "combined", "all"],
+                        choices=["baseline", "react", "explore", "schema", "combined", "all"],
                         help="Evaluation mode")
     parser.add_argument("--max-turns", type=int, default=3, help="Max turns for ReAct")
     parser.add_argument("--sample", action="store_true", help="Use sample data")

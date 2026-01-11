@@ -1,74 +1,99 @@
 # SpreadsheetBench Skills
 
-SpreadsheetBench requires generating Python code that works across multiple test cases with different data. The benchmark uses OJ-style evaluation where the same code must pass all 3 test cases.
+Based on insights from the original paper, this benchmark tests different approaches for spreadsheet manipulation.
+
+## Paper's Key Findings
+
+| Finding | Implication |
+|---------|-------------|
+| ✅ Multi-round + execution feedback | Most effective improvement method |
+| ✅ Strong code models > general LLMs | DeepseekCoder outperforms GPT-3.5 |
+| ❌ Static text preview | Limited effect (行数 5→10 几乎不变) |
+| ❌ TableQA methods | Completely fail (0%) - this is "改表" not "读表" |
+| ❌ Single-round prompt | High risk of overfitting to one test case |
 
 ## Available Modes
 
 ### 1. Baseline (Single-round)
-Direct code generation matching the original paper's approach.
-- Single prompt → Single code output
-- No iteration or refinement
+```
+Prompt with preview → Generate code → Done
+```
+- Matches original paper's baseline
+- Problem: Easy to overfit to the sample data
 
 ### 2. ReAct (Multi-round with Error Feedback)
-The original paper's key improvement over baseline.
 ```
-Generate Code → Execute → Get Error → Fix → Repeat (up to N times)
+Generate → Execute → Error? → Fix → Repeat
 ```
-- Provides traceback feedback to the model
-- Allows iterative refinement
-- Proven to improve performance in the original paper
+- Original paper's key improvement
+- **Proven to double performance** for most models
+- GPT-4o: minimal improvement (already strong first round)
 
-### 3. Schema-First (Our Skill)
-Analyze spreadsheet structure before generating code.
+### 3. Explore (Code-based Exploration) ⭐ NEW
 ```
-Stage 1: Analyze schema (tables, headers, data types, patterns)
-Stage 2: Generate robust code using dynamic finding
+NO static preview given
+↓
+Model generates exploration code
+↓
+Execute → See real spreadsheet structure
+↓
+Generate solution based on real output
+↓
+ReAct refinement if needed
 ```
-Key principle: Understand the data structure to avoid hardcoded positions.
+- **Paper's key insight**: Let model discover structure via code
+- More accurate than static text preview
+- Model sees real dimensions, headers, data patterns
 
-### 4. Combined (Schema + ReAct)
-Best of both approaches:
+### 4. Schema-First (Static Analysis)
 ```
-Schema Analysis → Generate Robust Code → Execute → Error Feedback → Fix
+Static text preview → Analyze structure → Generate robust code
 ```
+- Our original approach
+- Limitation: Text preview may miss important details
 
-## Why Hardcoded Code Fails
-
-SpreadsheetBench test cases have the same instruction but different data:
-- Test 1: 50 rows of data
-- Test 2: 100 rows of data
-- Test 3: 25 rows of data
-
-Hardcoded code like this fails:
-```python
-# ❌ FAILS: Assumes fixed row count
-for row in range(2, 52):
-    ws.cell(row, 4).value = ws.cell(row, 1).value * 2
+### 5. Combined (Schema + ReAct)
 ```
-
-Robust code works across all:
-```python
-# ✅ WORKS: Dynamic row detection
-for row in range(2, ws.max_row + 1):
-    if ws.cell(row, 1).value is not None:
-        ws.cell(row, 4).value = ws.cell(row, 1).value * 2
+Static analysis → Generate code → ReAct refinement
 ```
+- Combines static analysis with error feedback
 
-## Evaluation Metrics
+## Why Explore Mode Matters
 
-| Metric | Description |
-|--------|-------------|
-| **Soft Restriction** | % of test cases that pass (0-100%) |
-| **Hard Restriction** | 1 if ALL test cases pass, 0 otherwise |
+The paper shows that increasing preview rows (5→10→20) barely helps:
 
-Goal: Maximize Hard Restriction by generating code that handles data variations.
+> "行数从 5 → 10, 性能几乎不变"
 
-## Usage
+Because:
+1. Static preview can't capture: merged cells, multiple tables, non-standard headers
+2. Real structure is only discoverable by actually reading the Excel file
+3. Code execution provides ground truth
+
+The **Explore** mode addresses this by:
+1. NOT giving static preview (avoids false assumptions)
+2. Model writes code to inspect the real file
+3. Model sees actual output (dimensions, structure, sample data)
+4. Then generates solution based on real information
+
+## Recommended Approach
+
+Based on paper findings:
 
 ```bash
-# Run all modes and compare
-python spreadsheetbench/runner.py --limit 50 --mode all
+# Best for most cases
+python spreadsheetbench/runner.py --limit 50 --mode explore --max-turns 3
 
-# Run specific mode
-python spreadsheetbench/runner.py --limit 50 --mode combined --max-turns 3
+# If explore doesn't have execution environment
+python spreadsheetbench/runner.py --limit 50 --mode react --max-turns 3
 ```
+
+## Metrics
+
+| Metric | Description | Why It Matters |
+|--------|-------------|----------------|
+| **Soft Restriction** | % of test cases passed | Partial success |
+| **Hard Restriction** | 1 if ALL pass, 0 otherwise | Production-ready |
+
+Paper emphasizes: **Hard restriction reflects real-world usability**.
+
+A solution that works on 2/3 test cases is still broken for production.
