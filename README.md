@@ -11,6 +11,7 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on multiple
 | **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
 | **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa, pdf_text_extractor |
 | **ChartQAPro** | Chart QA | Relaxed Accuracy (5% tolerance) | chart_data_extractor |
+| **SpreadsheetBench** | Spreadsheet Manipulation | OJ-style (Soft/Hard Restriction) | spreadsheet_schema_analyzer |
 
 ## Usage
 
@@ -35,6 +36,13 @@ python chartqapro/runner.py --limit 50
 
 # ChartQAPro - filter by question type
 python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
+
+# SpreadsheetBench - spreadsheet manipulation
+python spreadsheetbench/runner.py --limit 10
+
+# SpreadsheetBench - filter by instruction type
+python spreadsheetbench/runner.py --limit 50 --cell-level
+python spreadsheetbench/runner.py --limit 50 --sheet-level
 ```
 
 ## Project Structure
@@ -45,6 +53,7 @@ python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
 ├── sealqa/             # SealQA benchmark
 ├── mmlongbench/        # MMLongBench-Doc benchmark
 ├── chartqapro/         # ChartQAPro benchmark
+├── spreadsheetbench/   # SpreadsheetBench benchmark
 ├── skills/
 │   ├── finqa_reasoning/
 │   ├── formula_code_assistant/
@@ -53,6 +62,7 @@ python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
 │   ├── conflicting_info_reasoner/
 │   ├── pdf_document_qa/
 │   ├── pdf_text_extractor/
-│   └── chart_data_extractor/
+│   ├── chart_data_extractor/
+│   └── spreadsheet_schema_analyzer/
 └── skill_system.py     # Skill loader
 ```
