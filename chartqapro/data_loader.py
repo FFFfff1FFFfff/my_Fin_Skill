@@ -46,25 +46,33 @@ def load_chartqapro(limit: Optional[int] = None,
         if question_types and q_type not in question_types:
             continue
 
-        # Convert image to base64
+        # Convert image to base64 (always convert to PNG for consistency)
         image = item.get("image")
         image_base64 = None
         if image is not None:
             try:
-                # HuggingFace datasets often return PIL Image directly
                 from PIL import Image as PILImage
+
+                # Convert to PIL Image first, then to PNG
+                pil_image = None
+
                 if isinstance(image, PILImage.Image):
-                    buffered = io.BytesIO()
-                    image.save(buffered, format="PNG")
-                    image_base64 = base64.standard_b64encode(buffered.getvalue()).decode('utf-8')
+                    pil_image = image
                 elif isinstance(image, bytes):
-                    image_base64 = base64.standard_b64encode(image).decode('utf-8')
+                    pil_image = PILImage.open(io.BytesIO(image))
                 elif isinstance(image, dict) and 'bytes' in image:
-                    # Some HF datasets store as {'bytes': ..., 'path': ...}
-                    image_base64 = base64.standard_b64encode(image['bytes']).decode('utf-8')
-                elif hasattr(image, 'save'):
+                    pil_image = PILImage.open(io.BytesIO(image['bytes']))
+                elif hasattr(image, 'convert'):
+                    pil_image = image
+
+                if pil_image is not None:
+                    # Convert to RGB if necessary (handles RGBA, P mode, etc.)
+                    if pil_image.mode in ('RGBA', 'P', 'LA'):
+                        pil_image = pil_image.convert('RGB')
+
+                    # Save as PNG
                     buffered = io.BytesIO()
-                    image.save(buffered, format="PNG")
+                    pil_image.save(buffered, format="PNG")
                     image_base64 = base64.standard_b64encode(buffered.getvalue()).decode('utf-8')
                 else:
                     print(f"Unknown image type {i}: {type(image)}")
