@@ -10,7 +10,7 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on multiple
 | **TableBench** | Table QA | EM / EM±10% | table_reasoning |
 | **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
 | **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa, pdf_text_extractor |
-| **ChartQAPro** | Chart QA | Relaxed Accuracy (5% tolerance) | chart_data_extractor (TODO) |
+| **ChartQAPro** | Chart QA | Relaxed Accuracy (5% tolerance) | chart_data_extractor |
 
 ## Usage
 
@@ -52,6 +52,7 @@ python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
 │   ├── web_search_tool/
 │   ├── conflicting_info_reasoner/
 │   ├── pdf_document_qa/
-│   └── pdf_text_extractor/
+│   ├── pdf_text_extractor/
+│   └── chart_data_extractor/
 └── skill_system.py     # Skill loader
 ```
