@@ -1,54 +1,74 @@
-# Spreadsheet Schema Analyzer Skill
+# SpreadsheetBench Skills
 
-## Purpose
-Analyzes spreadsheet structure before generating manipulation code to produce robust, reusable solutions that work across multiple test cases with different data.
+SpreadsheetBench requires generating Python code that works across multiple test cases with different data. The benchmark uses OJ-style evaluation where the same code must pass all 3 test cases.
 
-## Two-Stage Approach
+## Available Modes
 
-### Stage 1: Schema Analysis
-Analyze the spreadsheet to understand:
-- Table structure (boundaries, headers, data regions)
-- Column types and patterns
-- Nested headers, merged cells, irregular structures
-- Potential edge cases
+### 1. Baseline (Single-round)
+Direct code generation matching the original paper's approach.
+- Single prompt → Single code output
+- No iteration or refinement
 
-### Stage 2: Robust Code Generation
-Generate Python code that:
-- Finds data dynamically (search for headers, not hardcoded positions)
-- Uses relative references (row index from header, not absolute)
-- Handles variable-length data (loop until empty, not fixed ranges)
-- Validates assumptions (check columns exist before processing)
+### 2. ReAct (Multi-round with Error Feedback)
+The original paper's key improvement over baseline.
+```
+Generate Code → Execute → Get Error → Fix → Repeat (up to N times)
+```
+- Provides traceback feedback to the model
+- Allows iterative refinement
+- Proven to improve performance in the original paper
 
-## Why This Approach?
+### 3. Schema-First (Our Skill)
+Analyze spreadsheet structure before generating code.
+```
+Stage 1: Analyze schema (tables, headers, data types, patterns)
+Stage 2: Generate robust code using dynamic finding
+```
+Key principle: Understand the data structure to avoid hardcoded positions.
 
-SpreadsheetBench uses OJ-style evaluation where the same code must work on multiple test cases with different data. Naive approaches fail because they:
-1. Hardcode row/column numbers (e.g., `ws['A5']`)
-2. Assume fixed data lengths (e.g., `for row in range(2, 100)`)
-3. Don't validate that expected columns exist
+### 4. Combined (Schema + ReAct)
+Best of both approaches:
+```
+Schema Analysis → Generate Robust Code → Execute → Error Feedback → Fix
+```
 
-By separating schema understanding from code generation, we produce more robust solutions.
+## Why Hardcoded Code Fails
 
-## Key Principles
+SpreadsheetBench test cases have the same instruction but different data:
+- Test 1: 50 rows of data
+- Test 2: 100 rows of data
+- Test 3: 25 rows of data
 
+Hardcoded code like this fails:
 ```python
-# ❌ BAD: Hardcoded, brittle
-for row in range(2, 100):
-    ws['D' + str(row)] = ws['B' + str(row)].value.upper()
+# ❌ FAILS: Assumes fixed row count
+for row in range(2, 52):
+    ws.cell(row, 4).value = ws.cell(row, 1).value * 2
+```
 
-# ✅ GOOD: Dynamic, robust
-header_row = find_header_row(ws, "Name")
-name_col = find_column(ws, header_row, "Name")
-output_col = find_column(ws, header_row, "Output") or ws.max_column + 1
-
-for row in range(header_row + 1, ws.max_row + 1):
-    cell_value = ws.cell(row, name_col).value
-    if cell_value is not None:
-        ws.cell(row, output_col).value = str(cell_value).upper()
+Robust code works across all:
+```python
+# ✅ WORKS: Dynamic row detection
+for row in range(2, ws.max_row + 1):
+    if ws.cell(row, 1).value is not None:
+        ws.cell(row, 4).value = ws.cell(row, 1).value * 2
 ```
 
 ## Evaluation Metrics
 
-- **Soft Restriction**: % of test cases that pass (0-100%)
-- **Hard Restriction**: Binary (1 if ALL test cases pass, 0 otherwise)
+| Metric | Description |
+|--------|-------------|
+| **Soft Restriction** | % of test cases that pass (0-100%) |
+| **Hard Restriction** | 1 if ALL test cases pass, 0 otherwise |
 
-The goal is to maximize Hard Restriction by generating code that handles data variations.
+Goal: Maximize Hard Restriction by generating code that handles data variations.
+
+## Usage
+
+```bash
+# Run all modes and compare
+python spreadsheetbench/runner.py --limit 50 --mode all
+
+# Run specific mode
+python spreadsheetbench/runner.py --limit 50 --mode combined --max-turns 3
+```

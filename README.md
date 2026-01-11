@@ -37,8 +37,14 @@ python chartqapro/runner.py --limit 50
 # ChartQAPro - filter by question type
 python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
 
-# SpreadsheetBench - spreadsheet manipulation
+# SpreadsheetBench - spreadsheet manipulation (all modes)
 python spreadsheetbench/runner.py --limit 10
+
+# SpreadsheetBench - specific modes
+python spreadsheetbench/runner.py --limit 50 --mode baseline    # Single-round (original paper)
+python spreadsheetbench/runner.py --limit 50 --mode react       # Multi-round with error feedback
+python spreadsheetbench/runner.py --limit 50 --mode schema      # Schema-first analysis
+python spreadsheetbench/runner.py --limit 50 --mode combined    # Schema + ReAct
 
 # SpreadsheetBench - filter by instruction type
 python spreadsheetbench/runner.py --limit 50 --cell-level
