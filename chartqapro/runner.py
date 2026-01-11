@@ -2,6 +2,8 @@
 """
 ChartQAPro benchmark runner: compare baseline vs with-skill performance
 Chart Question Answering with visual and logical reasoning
+
+Skill approach: Extract → Table → Reason → Strict Answer
 """
 
 import json
@@ -14,7 +16,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from anthropic import Anthropic
 from data_loader import load_chartqapro, load_sample_data, get_question_type_stats
 from evaluator import relaxed_correctness, evaluate_batch
-from skill_system import SkillManager
 
 client = Anthropic()
 
@@ -42,66 +43,167 @@ def create_image_message(image_base64: str, text: str, system_prompt: str = None
     }
 
 
-def ask_single_question(image_base64: str, question: str, question_type: str,
-                        model: str = "claude-sonnet-4-5-20250929",
-                        system_prompt: str = None,
-                        conversation_history: list = None) -> str:
-    """
-    Ask a single question about a chart image.
-
-    Args:
-        image_base64: Base64 encoded chart image
-        question: The question to ask
-        question_type: Type of question for format hints
-        model: Model to use
-        system_prompt: Optional system prompt
-        conversation_history: Previous Q&A pairs for conversational questions
-
-    Returns:
-        Model's answer
-    """
-    # Build prompt with format hints based on question type
-    format_hints = {
-        "Fact Checking": "Answer with only 'True' or 'False'.",
-        "Multi Choice": "Answer with only the letter of the correct option (e.g., 'A', 'B', 'C', or 'D').",
-        "Reasoning": "Provide a concise answer. For numbers, give just the number.",
-        "Hypothetical": "Provide a concise answer based on the chart data.",
-        "Conversational": "Answer concisely based on the chart and previous context.",
+def create_text_message(text: str, system_prompt: str = None) -> dict:
+    """Create a text-only message for Claude API."""
+    return {
+        "messages": [{"role": "user", "content": text}],
+        "system": system_prompt
     }
 
-    hint = format_hints.get(question_type, "Answer concisely.")
 
-    # Build conversation context if available
-    context = ""
-    if conversation_history:
-        context = "Previous conversation:\n"
-        for prev_q, prev_a in conversation_history:
-            context += f"Q: {prev_q}\nA: {prev_a}\n"
-        context += "\n"
+# =============================================================================
+# BASELINE: Direct question answering
+# =============================================================================
 
-    prompt = f"""{context}Question: {question}
+def ask_baseline(image_base64: str, questions: list, question_type: str,
+                 model: str = "claude-sonnet-4-5-20250929") -> list:
+    """
+    Baseline: direct questions without skills.
+    """
+    format_hints = {
+        "Fact Checking": "Answer with ONLY 'True' or 'False', nothing else.",
+        "Multi Choice": "Answer with ONLY the letter (A, B, C, or D), nothing else.",
+        "Reasoning": "Answer with ONLY the value/number, nothing else.",
+        "Hypothetical": "Answer concisely with ONLY the answer, nothing else.",
+        "Conversational": "Answer concisely with ONLY the answer, nothing else.",
+    }
+
+    answers = []
+    conversation_history = []
+
+    for question in questions:
+        hint = format_hints.get(question_type, "Answer concisely.")
+
+        # Build conversation context
+        context = ""
+        if question_type == "Conversational" and conversation_history:
+            context = "Previous:\n"
+            for prev_q, prev_a in conversation_history:
+                context += f"Q: {prev_q}\nA: {prev_a}\n"
+            context += "\n"
+
+        prompt = f"""{context}Question: {question}
 
 {hint}
 
 Answer:"""
 
-    msg_data = create_image_message(image_base64, prompt, system_prompt)
+        msg_data = create_image_message(image_base64, prompt)
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=100,
+            temperature=0,
+            messages=msg_data["messages"]
+        )
+
+        answer = response.content[0].text.strip()
+        # Take first line only
+        answer = answer.split('\n')[0].strip()
+        # Remove prefixes
+        for prefix in ["Answer:", "The answer is", "A:", "answer:"]:
+            if answer.lower().startswith(prefix.lower()):
+                answer = answer[len(prefix):].strip()
+
+        answers.append(answer)
+        conversation_history.append((question, answer))
+
+    return answers
+
+
+# =============================================================================
+# SKILL: Extract → Table → Reason → Strict Answer
+# =============================================================================
+
+def extract_chart_data(image_base64: str, model: str = "claude-sonnet-4-5-20250929") -> str:
+    """
+    Stage 1: Extract all data from chart into structured table.
+
+    This separates the visual reading task from reasoning.
+    """
+    prompt = """Look at this chart and extract ALL the data into a structured table.
+
+Instructions:
+1. Identify the chart type (bar, line, pie, etc.)
+2. Extract ALL data points with their exact values
+3. Include axis labels, legend items, and any text annotations
+4. Format as a markdown table or JSON
+
+Output format:
+CHART TYPE: [type]
+DATA:
+| Category | Value |
+|----------|-------|
+| ... | ... |
+
+Extract every visible number and label. Be precise with numbers."""
+
+    msg_data = create_image_message(image_base64, prompt)
 
     response = client.messages.create(
         model=model,
-        max_tokens=256,
+        max_tokens=1024,
         temperature=0,
-        system=msg_data["system"] if msg_data["system"] else [],
+        messages=msg_data["messages"]
+    )
+
+    return response.content[0].text.strip()
+
+
+def reason_from_table(extracted_data: str, question: str, question_type: str,
+                      model: str = "claude-sonnet-4-5-20250929",
+                      conversation_history: list = None) -> str:
+    """
+    Stage 2: Answer question based on extracted table data.
+
+    No image needed - pure text reasoning.
+    """
+    format_rules = {
+        "Fact Checking": "Output ONLY: True or False",
+        "Multi Choice": "Output ONLY: the letter (A, B, C, or D)",
+        "Reasoning": "Output ONLY: the number or short answer",
+        "Hypothetical": "Output ONLY: the short answer",
+        "Conversational": "Output ONLY: the short answer",
+    }
+
+    rule = format_rules.get(question_type, "Output ONLY the answer")
+
+    # Build conversation context
+    context = ""
+    if conversation_history:
+        context = "Previous Q&A:\n"
+        for prev_q, prev_a in conversation_history:
+            context += f"Q: {prev_q} → A: {prev_a}\n"
+        context += "\n"
+
+    prompt = f"""Based on the extracted chart data below, answer the question.
+
+=== EXTRACTED CHART DATA ===
+{extracted_data}
+=== END DATA ===
+
+{context}Question: {question}
+
+Rules:
+- Use ONLY the data above to answer
+- {rule}
+- No explanation, no units unless required
+- If the answer is a number, give the exact number from the data
+
+Answer:"""
+
+    msg_data = create_text_message(prompt)
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=50,
+        temperature=0,
         messages=msg_data["messages"]
     )
 
     answer = response.content[0].text.strip()
-
-    # Clean up answer - take first line only for most types
-    lines = answer.split('\n')
-    answer = lines[0].strip()
-
-    # Remove common prefixes
+    # Take first line, remove prefixes
+    answer = answer.split('\n')[0].strip()
     for prefix in ["Answer:", "The answer is", "A:"]:
         if answer.lower().startswith(prefix.lower()):
             answer = answer[len(prefix):].strip()
@@ -109,69 +211,48 @@ Answer:"""
     return answer
 
 
-def ask_baseline(image_base64: str, questions: list, question_type: str,
-                 model: str = "claude-sonnet-4-5-20250929") -> list:
-    """
-    Baseline: direct questions without skills.
-
-    For conversational questions, maintains context between turns.
-
-    Returns:
-        List of answers
-    """
-    answers = []
-    conversation_history = []
-
-    for question in questions:
-        answer = ask_single_question(
-            image_base64, question, question_type, model,
-            conversation_history=conversation_history if question_type == "Conversational" else None
-        )
-        answers.append(answer)
-        conversation_history.append((question, answer))
-
-    return answers
-
-
 def ask_with_skill(image_base64: str, questions: list, question_type: str,
-                   skill_prompt: str, model: str = "claude-sonnet-4-5-20250929") -> list:
+                   model: str = "claude-sonnet-4-5-20250929") -> tuple[list, str]:
     """
-    Answer with skill enhancement.
+    Skill approach: Extract → Table → Reason → Strict Answer
 
     Returns:
-        List of answers
+        tuple: (list of answers, extracted_data)
     """
+    # Stage 1: Extract data (only once per image)
+    extracted_data = extract_chart_data(image_base64, model)
+
+    # Stage 2: Reason from table for each question
     answers = []
     conversation_history = []
 
     for question in questions:
-        answer = ask_single_question(
-            image_base64, question, question_type, model,
-            system_prompt=skill_prompt,
+        answer = reason_from_table(
+            extracted_data, question, question_type, model,
             conversation_history=conversation_history if question_type == "Conversational" else None
         )
         answers.append(answer)
         conversation_history.append((question, answer))
 
-    return answers
+    return answers, extracted_data
 
+
+# =============================================================================
+# BENCHMARK RUNNER
+# =============================================================================
 
 def run_benchmark(limit: int = None,
                   question_types: list = None,
                   model: str = "claude-sonnet-4-5-20250929",
-                  use_sample: bool = False):
+                  use_sample: bool = False,
+                  use_skill: bool = True):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
-
-    Args:
-        limit: Number of samples to test
-        question_types: Filter by question types
-        model: Model to use
-        use_sample: Use sample data instead of downloading
     """
     print("=" * 70)
     print("ChartQAPro Skill Benchmark")
     print("=" * 70)
+    print("\nSkill: Extract → Table → Reason → Strict Answer")
 
     # Load data
     print(f"\nLoading data (limit={limit})...")
@@ -186,21 +267,6 @@ def run_benchmark(limit: int = None,
     print("\nQuestion Type Distribution:")
     for q_type, count in sorted(stats.items()):
         print(f"  {q_type}: {count}")
-
-    # Load skills (for future implementation)
-    skill_manager = SkillManager()
-    skill_names = ['chart_data_extractor']  # Future skill
-
-    # Check if skills exist
-    available_skills = skill_manager.list_skills()
-    active_skills = [s for s in skill_names if s in available_skills]
-
-    if active_skills:
-        skill_prompt = skill_manager.build_system_prompt(active_skills)
-        print(f"\nLoaded skills: {active_skills}")
-    else:
-        skill_prompt = None
-        print("\nNo chart skills found. Running baseline only.")
 
     # Filter out samples without images
     samples = [s for s in samples if s["image_base64"] is not None]
@@ -224,13 +290,13 @@ def run_benchmark(limit: int = None,
 
         print(f"\n[{i+1}/{len(samples)}] Type: {question_type}")
         print(f"Q: {questions[0][:60]}..." if len(questions[0]) > 60 else f"Q: {questions[0]}")
-        print(f"A: {answers[-1]}")  # Show final answer for conversational
+        print(f"A: {answers[-1]}")
 
         # Baseline
         try:
             pred_baseline = ask_baseline(image_base64, questions, question_type, model)
             score_baseline = relaxed_correctness(answers, pred_baseline, year_flags, question_type)
-            print(f"Baseline: {pred_baseline[-1][:50]}... -> {score_baseline:.2f}")
+            print(f"Baseline: {pred_baseline[-1][:40]} -> {score_baseline:.2f}")
         except Exception as e:
             pred_baseline = [""] * len(questions)
             score_baseline = 0.0
@@ -246,16 +312,17 @@ def run_benchmark(limit: int = None,
             "score": score_baseline
         })
 
-        # With skill (if available)
-        if skill_prompt:
+        # With skill
+        if use_skill:
             try:
-                pred_skill = ask_with_skill(
-                    image_base64, questions, question_type, skill_prompt, model
+                pred_skill, extracted_data = ask_with_skill(
+                    image_base64, questions, question_type, model
                 )
                 score_skill = relaxed_correctness(answers, pred_skill, year_flags, question_type)
-                print(f"Skill:    {pred_skill[-1][:50]}... -> {score_skill:.2f}")
+                print(f"Skill:    {pred_skill[-1][:40]} -> {score_skill:.2f}")
             except Exception as e:
                 pred_skill = [""] * len(questions)
+                extracted_data = ""
                 score_skill = 0.0
                 print(f"Skill:    ERROR - {e}")
 
@@ -266,6 +333,7 @@ def run_benchmark(limit: int = None,
                 "question_type": question_type,
                 "year_flags": year_flags,
                 "predictions": pred_skill,
+                "extracted_data": extracted_data,
                 "score": score_skill
             })
 
@@ -278,7 +346,7 @@ def run_benchmark(limit: int = None,
     print("RESULTS SUMMARY")
     print("=" * 70)
 
-    print(f"\nBaseline:")
+    print(f"\nBaseline (direct):")
     print(f"  Accuracy: {eval_baseline['accuracy']:.1%} ({eval_baseline['total_score']:.1f}/{eval_baseline['total']})")
     print(f"  By Question Type:")
     for q_type, acc in sorted(eval_baseline['by_type'].items()):
@@ -286,7 +354,7 @@ def run_benchmark(limit: int = None,
         print(f"    {q_type}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
     if eval_skill:
-        print(f"\nWith Skill:")
+        print(f"\nWith Skill (Extract→Table→Reason):")
         print(f"  Accuracy: {eval_skill['accuracy']:.1%} ({eval_skill['total_score']:.1f}/{eval_skill['total']})")
         print(f"  By Question Type:")
         for q_type, acc in sorted(eval_skill['by_type'].items()):
@@ -337,11 +405,14 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929")
     parser.add_argument("--sample", action="store_true",
                         help="Use sample data for testing")
+    parser.add_argument("--no-skill", action="store_true",
+                        help="Run baseline only, skip skill")
 
     args = parser.parse_args()
     run_benchmark(
         limit=args.limit,
         question_types=args.types,
         model=args.model,
-        use_sample=args.sample
+        use_sample=args.sample,
+        use_skill=not args.no_skill
     )
