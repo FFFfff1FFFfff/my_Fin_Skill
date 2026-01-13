@@ -3,11 +3,13 @@
 ChartQAPro benchmark runner: compare baseline vs with-skill performance
 Chart Question Answering with visual and logical reasoning
 
-Skill approach: Careful reading with verification
+Skill approach: Chain-of-Thought (CoT) with structured output
+Based on paper findings: CoT > PoT > Direct for closed-source models
 """
 
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -20,64 +22,76 @@ from evaluator import relaxed_correctness, evaluate_batch
 client = Anthropic()
 
 
-def create_image_message(image_base64: str, text: str) -> dict:
+def create_image_message(image_base64: str, text: str) -> list:
     """Create a message with image content for Claude API."""
-    return {
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_base64}},
-                {"type": "text", "text": text}
-            ]
-        }]
-    }
+    return [{
+        "role": "user",
+        "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_base64}},
+            {"type": "text", "text": text}
+        ]
+    }]
 
 
-def extract_answer(text: str) -> str:
-    """Extract clean answer from response."""
-    answer = text.strip().split('\n')[0].strip()
-    for prefix in ["Answer:", "The answer is", "A:", "answer:", "**", "Final answer:"]:
+def extract_final_answer(text: str) -> str:
+    """Extract answer from 'Final Answer: xxx' format."""
+    # Try to find "Final Answer:" pattern
+    match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+    if match:
+        answer = match.group(1).strip()
+    else:
+        # Fallback: take last non-empty line
+        lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
+        answer = lines[-1] if lines else text.strip()
+
+    # Clean up
+    for prefix in ["Answer:", "The answer is", "A:", "**"]:
         if answer.lower().startswith(prefix.lower()):
             answer = answer[len(prefix):].strip()
     return answer.rstrip('*').strip()
 
 
 # =============================================================================
-# BASELINE: Direct question answering
+# BASELINE: Direct question answering (no CoT)
 # =============================================================================
 
 def ask_baseline(image_base64: str, questions: list, question_type: str,
                  model: str = "claude-sonnet-4-5-20250929") -> list:
-    """Baseline: direct questions without skills."""
+    """Baseline: direct questions without CoT."""
     format_hints = {
-        "Fact Checking": "Output ONLY 'True' or 'False'. No explanation.",
-        "Multi Choice": "Output ONLY the letter (A, B, C, or D). No explanation.",
-        "Reasoning": "Output ONLY the number or value. No explanation.",
-        "Hypothetical": "Output ONLY the short answer. No explanation.",
-        "Conversational": "Output ONLY the short answer. No explanation.",
+        "Fact Checking": "Output ONLY 'True' or 'False'.",
+        "Multi Choice": "Output ONLY the letter (A, B, C, or D).",
+        "Reasoning": "Output ONLY the number or value.",
+        "Hypothetical": "Output ONLY the short answer.",
+        "Conversational": "Output ONLY the short answer.",
     }
 
     answers = []
     conversation_history = []
 
     for question in questions:
-        hint = format_hints.get(question_type, "Output ONLY the answer. No explanation.")
+        hint = format_hints.get(question_type, "Output ONLY the answer.")
         context = ""
         if question_type == "Conversational" and conversation_history:
             context = "Previous:\n" + "\n".join(f"Q: {q}\nA: {a}" for q, a in conversation_history) + "\n\n"
 
         prompt = f"""{context}Question: {question}
 
-IMPORTANT: {hint}
-Do NOT explain. Do NOT describe what you see. Just output the answer directly.
+{hint} No explanation.
 
 Answer:"""
 
         response = client.messages.create(
             model=model, max_tokens=50, temperature=0,
-            messages=create_image_message(image_base64, prompt)["messages"]
+            messages=create_image_message(image_base64, prompt)
         )
-        answer = extract_answer(response.content[0].text)
+
+        answer = response.content[0].text.strip().split('\n')[0].strip()
+        for prefix in ["Answer:", "The answer is", "A:", "**"]:
+            if answer.lower().startswith(prefix.lower()):
+                answer = answer[len(prefix):].strip()
+        answer = answer.rstrip('*').strip()
+
         answers.append(answer)
         conversation_history.append((question, answer))
 
@@ -85,44 +99,58 @@ Answer:"""
 
 
 # =============================================================================
-# SKILL: Careful reading with verification
+# SKILL: Chain-of-Thought (CoT)
 # =============================================================================
 
-def ask_with_skill(image_base64: str, questions: list, question_type: str,
-                   model: str = "claude-sonnet-4-5-20250929") -> tuple[list, str]:
+def ask_with_cot(image_base64: str, questions: list, question_type: str,
+                 model: str = "claude-sonnet-4-5-20250929") -> list:
     """
-    Skill: Read carefully, verify, then answer.
-    Single approach - no classification needed.
+    Skill: Chain-of-Thought reasoning.
+
+    Paper finding: CoT significantly outperforms direct answering for closed-source models.
+    Claude Sonnet 3.5 achieved highest accuracy (55.81%) with CoT.
     """
+    format_rules = {
+        "Fact Checking": "Your final answer must be exactly 'True' or 'False'.",
+        "Multi Choice": "Your final answer must be exactly one letter: A, B, C, or D.",
+        "Reasoning": "Your final answer must be a specific number or value.",
+        "Hypothetical": "Your final answer must be a concise answer.",
+        "Conversational": "Your final answer must be a concise answer.",
+    }
+
     answers = []
     conversation_history = []
 
     for question in questions:
+        rule = format_rules.get(question_type, "Your final answer must be concise.")
         context = ""
         if question_type == "Conversational" and conversation_history:
-            context = "Previous:\n" + "\n".join(f"Q: {q}\nA: {a}" for q, a in conversation_history) + "\n\n"
+            context = "Previous Q&A:\n" + "\n".join(f"Q: {q} → A: {a}" for q, a in conversation_history) + "\n\n"
 
         prompt = f"""{context}Question: {question}
 
-Instructions:
-1. Read the chart carefully
-2. Find the specific data points needed
-3. Verify your reading is correct
+Think step by step:
+1. What specific data do I need to read from the chart?
+2. Read those values carefully from the chart
+3. Apply reasoning/calculation if needed
+4. Verify the answer makes sense
 
-Output ONLY the final answer. No explanation.
+{rule}
+If the chart does not contain enough information, answer "Cannot determine".
 
-Answer:"""
+End your response with:
+Final Answer: [your answer]"""
 
         response = client.messages.create(
-            model=model, max_tokens=50, temperature=0,
-            messages=create_image_message(image_base64, prompt)["messages"]
+            model=model, max_tokens=500, temperature=0,
+            messages=create_image_message(image_base64, prompt)
         )
 
-        answer = extract_answer(response.content[0].text)
+        answer = extract_final_answer(response.content[0].text)
         answers.append(answer)
         conversation_history.append((question, answer))
 
-    return answers, "careful"
+    return answers
 
 
 # =============================================================================
@@ -133,14 +161,14 @@ def run_benchmark(limit: int = None,
                   question_types: list = None,
                   model: str = "claude-sonnet-4-5-20250929",
                   use_sample: bool = False,
-                  use_skill: bool = True):
+                  use_cot: bool = True):
     """
-    Run benchmark comparing baseline vs skill-enhanced performance.
+    Run benchmark comparing baseline (direct) vs CoT performance.
     """
     print("=" * 70)
     print("ChartQAPro Skill Benchmark")
     print("=" * 70)
-    print("\nSkill: Careful reading with verification")
+    print("\nSkill: Chain-of-Thought (CoT) reasoning")
 
     # Load data
     print(f"\nLoading data (limit={limit})...")
@@ -165,7 +193,7 @@ def run_benchmark(limit: int = None,
         return None
 
     results_baseline = []
-    results_skill = []
+    results_cot = []
 
     print("\n" + "-" * 70)
 
@@ -180,15 +208,15 @@ def run_benchmark(limit: int = None,
         print(f"Q: {questions[0][:60]}..." if len(questions[0]) > 60 else f"Q: {questions[0]}")
         print(f"A: {answers[-1]}")
 
-        # Baseline
+        # Baseline (direct)
         try:
             pred_baseline = ask_baseline(image_base64, questions, question_type, model)
             score_baseline = relaxed_correctness(answers, pred_baseline, year_flags, question_type)
-            print(f"Baseline: {pred_baseline[-1][:40]} -> {score_baseline:.2f}")
+            print(f"Direct: {pred_baseline[-1][:40]} -> {score_baseline:.2f}")
         except Exception as e:
             pred_baseline = [""] * len(questions)
             score_baseline = 0.0
-            print(f"Baseline: ERROR - {e}")
+            print(f"Direct: ERROR - {e}")
 
         results_baseline.append({
             "id": sample["id"],
@@ -200,56 +228,52 @@ def run_benchmark(limit: int = None,
             "score": score_baseline
         })
 
-        # With skill
-        if use_skill:
+        # With CoT
+        if use_cot:
             try:
-                pred_skill, method = ask_with_skill(
-                    image_base64, questions, question_type, model
-                )
-                score_skill = relaxed_correctness(answers, pred_skill, year_flags, question_type)
-                print(f"Skill({method[:4]}): {pred_skill[-1][:35]} -> {score_skill:.2f}")
+                pred_cot = ask_with_cot(image_base64, questions, question_type, model)
+                score_cot = relaxed_correctness(answers, pred_cot, year_flags, question_type)
+                print(f"CoT:    {pred_cot[-1][:40]} -> {score_cot:.2f}")
             except Exception as e:
-                pred_skill = [""] * len(questions)
-                method = ""
-                score_skill = 0.0
-                print(f"Skill:    ERROR - {e}")
+                pred_cot = [""] * len(questions)
+                score_cot = 0.0
+                print(f"CoT:    ERROR - {e}")
 
-            results_skill.append({
+            results_cot.append({
                 "id": sample["id"],
                 "questions": questions,
                 "answers": answers,
                 "question_type": question_type,
                 "year_flags": year_flags,
-                "predictions": pred_skill,
-                "method": method,
-                "score": score_skill
+                "predictions": pred_cot,
+                "score": score_cot
             })
 
     # Evaluate
     eval_baseline = evaluate_batch(results_baseline)
-    eval_skill = evaluate_batch(results_skill) if results_skill else None
+    eval_cot = evaluate_batch(results_cot) if results_cot else None
 
     # Print summary
     print("\n" + "=" * 70)
     print("RESULTS SUMMARY")
     print("=" * 70)
 
-    print(f"\nBaseline (direct):")
+    print(f"\nDirect (no CoT):")
     print(f"  Accuracy: {eval_baseline['accuracy']:.1%} ({eval_baseline['total_score']:.1f}/{eval_baseline['total']})")
     print(f"  By Question Type:")
     for q_type, acc in sorted(eval_baseline['by_type'].items()):
         detail = eval_baseline['by_type_detail'][q_type]
         print(f"    {q_type}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
-    if eval_skill:
-        print(f"\nWith Skill (Careful):")
-        print(f"  Accuracy: {eval_skill['accuracy']:.1%} ({eval_skill['total_score']:.1f}/{eval_skill['total']})")
+    if eval_cot:
+        print(f"\nWith CoT:")
+        print(f"  Accuracy: {eval_cot['accuracy']:.1%} ({eval_cot['total_score']:.1f}/{eval_cot['total']})")
         print(f"  By Question Type:")
-        for q_type, acc in sorted(eval_skill['by_type'].items()):
-            detail = eval_skill['by_type_detail'][q_type]
+        for q_type, acc in sorted(eval_cot['by_type'].items()):
+            detail = eval_cot['by_type_detail'][q_type]
             print(f"    {q_type}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
-        improvement = eval_skill['accuracy'] - eval_baseline['accuracy']
+        improvement = eval_cot['accuracy'] - eval_baseline['accuracy']
         print(f"\nImprovement: {improvement:+.1%}")
 
     # Save results
@@ -258,20 +282,20 @@ def run_benchmark(limit: int = None,
         "timestamp": timestamp,
         "model": model,
         "num_samples": len(samples),
-        "baseline": {
+        "direct": {
             "accuracy": eval_baseline['accuracy'],
             "by_type": eval_baseline['by_type'],
             "results": results_baseline
         },
     }
 
-    if eval_skill:
-        output["skill"] = {
-            "accuracy": eval_skill['accuracy'],
-            "by_type": eval_skill['by_type'],
-            "results": results_skill
+    if eval_cot:
+        output["cot"] = {
+            "accuracy": eval_cot['accuracy'],
+            "by_type": eval_cot['by_type'],
+            "results": results_cot
         }
-        output["improvement"] = eval_skill['accuracy'] - eval_baseline['accuracy']
+        output["improvement"] = eval_cot['accuracy'] - eval_baseline['accuracy']
 
     output_file = f"chartqapro_results_{timestamp}.json"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -293,8 +317,8 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929")
     parser.add_argument("--sample", action="store_true",
                         help="Use sample data for testing")
-    parser.add_argument("--no-skill", action="store_true",
-                        help="Run baseline only, skip skill")
+    parser.add_argument("--no-cot", action="store_true",
+                        help="Run direct only, skip CoT")
 
     args = parser.parse_args()
     run_benchmark(
@@ -302,5 +326,5 @@ if __name__ == "__main__":
         question_types=args.types,
         model=args.model,
         use_sample=args.sample,
-        use_skill=not args.no_skill
+        use_cot=not args.no_cot
     )
