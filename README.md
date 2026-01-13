@@ -1,69 +1,63 @@
 # Skill Benchmark
 
-Benchmark comparing Claude's baseline vs skill-augmented performance on multiple QA tasks.
+Benchmark comparing Claude's baseline vs skill-augmented performance on QA tasks.
 
-## Benchmarks
+## Benchmarks & Commands
 
-| Benchmark | Task | Evaluation | Skills |
-|-----------|------|------------|--------|
-| **FinQA** | Financial QA | Exact match (5 decimals) | finqa_reasoning, formula_code_assistant |
-| **TableBench** | Table QA | EM / EM±10% | table_reasoning |
-| **SealQA** | Search-augmented QA | LLM grading | web_search_tool, conflicting_info_reasoner |
-| **MMLongBench-Doc** | PDF Document QA | ANLS / F1 | pdf_document_qa, pdf_text_extractor |
-| **ChartQAPro** | Chart QA | Relaxed Accuracy (5% tolerance) | chart_data_extractor |
-| **SpreadsheetBench** | Spreadsheet Manipulation | OJ-style (Soft/Hard Restriction) | spreadsheet_schema_analyzer |
+| Benchmark | Task | Metric | Command |
+|-----------|------|--------|---------|
+| **FinQA** | Financial QA | Exact Match | `python finqa/runner.py --limit 50` |
+| **TableBench** | Table QA | EM / EM±10% | `python tablebench/runner.py --source hf --limit 50` |
+| **SealQA** | Search QA | LLM Grading | `python sealqa/runner.py --search --limit 10` |
+| **MMLongBench** | PDF QA | ANLS / F1 | `python mmlongbench/runner.py --limit 50` |
+| **ChartQAPro** | Chart QA | Relaxed Acc | `python chartqapro/runner.py --limit 50` |
+| **SpreadsheetBench** | Excel Code Gen | Hard/Soft | `python spreadsheetbench/runner.py --mode all --limit 20` |
 
-## Usage
+## Skills
+
+| Skill | Purpose | Benchmark |
+|-------|---------|-----------|
+| `finqa_reasoning` | Step-by-step financial calculation | FinQA |
+| `formula_code_assistant` | Generate Python for numeric computation | FinQA |
+| `table_reasoning` | Structured table analysis | TableBench |
+| `web_search_tool` | Web search integration | SealQA |
+| `conflicting_info_reasoner` | Resolve contradictory sources | SealQA |
+| `pdf_document_qa` | PDF comprehension strategies | MMLongBench |
+| `pdf_text_extractor` | Extract text/tables from PDF | MMLongBench |
+| `chart_data_extractor` | Extract data from chart images | ChartQAPro |
+| `spreadsheet_schema_analyzer` | Excel structure analysis | SpreadsheetBench |
+
+## Key Options
 
 ```bash
-# FinQA - test with dataset file
+# FinQA - specify dataset file
 python finqa/runner.py --source test.json --limit 50
 
-# TableBench - load from HuggingFace
-python tablebench/runner.py --source hf --limit 50
+# SealQA - enable web search
+python sealqa/runner.py --search --backend builtin --limit 10
 
-# SealQA - with web search enabled
-python sealqa/runner.py --source sample --limit 10 --search --backend builtin
+# MMLongBench - skip unanswerable
+python mmlongbench/runner.py --skip-unanswerable --limit 50
 
-# MMLongBench-Doc - PDF document understanding
-python mmlongbench/runner.py --limit 10
+# ChartQAPro - filter by type
+python chartqapro/runner.py --type Reasoning --limit 50
 
-# MMLongBench-Doc - skip unanswerable questions
-python mmlongbench/runner.py --limit 50 --skip-unanswerable
-
-# ChartQAPro - chart question answering
-python chartqapro/runner.py --limit 50
-
-# ChartQAPro - filter by question type
-python chartqapro/runner.py --limit 50 --type Reasoning --type "Fact Checking"
-
-# SpreadsheetBench - spreadsheet manipulation
-python spreadsheetbench/runner.py --limit 20 --mode baseline
-python spreadsheetbench/runner.py --limit 20 --mode react --max-turns 5
+# SpreadsheetBench - compare baseline vs react
+python spreadsheetbench/runner.py --mode all --limit 20
 
 # SpreadsheetBench - filter by instruction type
-python spreadsheetbench/runner.py --limit 50 --cell-level
-python spreadsheetbench/runner.py --limit 50 --sheet-level
+python spreadsheetbench/runner.py --cell-level --limit 50
 ```
 
 ## Project Structure
 
 ```
-├── finqa/              # FinQA benchmark
-├── tablebench/         # TableBench benchmark
-├── sealqa/             # SealQA benchmark
-├── mmlongbench/        # MMLongBench-Doc benchmark
-├── chartqapro/         # ChartQAPro benchmark
-├── spreadsheetbench/   # SpreadsheetBench benchmark
-├── skills/
-│   ├── finqa_reasoning/
-│   ├── formula_code_assistant/
-│   ├── table_reasoning/
-│   ├── web_search_tool/
-│   ├── conflicting_info_reasoner/
-│   ├── pdf_document_qa/
-│   ├── pdf_text_extractor/
-│   ├── chart_data_extractor/
-│   └── spreadsheet_schema_analyzer/
+├── finqa/              # Financial QA
+├── tablebench/         # Table QA
+├── sealqa/             # Search-augmented QA
+├── mmlongbench/        # PDF Document QA
+├── chartqapro/         # Chart QA
+├── spreadsheetbench/   # Spreadsheet manipulation
+├── skills/             # Skill prompts (SKILL.md files)
 └── skill_system.py     # Skill loader
 ```
