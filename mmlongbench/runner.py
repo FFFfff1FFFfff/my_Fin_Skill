@@ -308,17 +308,16 @@ If information is not in the document, state "Not answerable"."""
 
 
 def run_benchmark(limit: int = None,
-                  skip_unanswerable: bool = False,
                   model: str = "claude-sonnet-4-5-20250929",
                   use_sample: bool = False,
                   use_images: bool = False,
                   use_gpt_extraction: bool = False):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
+    Reports both all-questions and answerable-only metrics.
 
     Args:
         limit: Number of samples to test
-        skip_unanswerable: Skip "Not answerable" questions
         model: Model to use
         use_sample: Use sample data instead of downloading
         use_images: Use page images instead of PDF (matches original paper)
@@ -342,12 +341,12 @@ def run_benchmark(limit: int = None,
     else:
         print("Answer extraction: Regex")
 
-    # Load data
-    print(f"\nLoading data (limit={limit}, skip_unanswerable={skip_unanswerable})...")
+    # Load data (always load all, report both metrics)
+    print(f"\nLoading data (limit={limit})...")
     if use_sample:
         samples = load_sample_data()
     else:
-        samples = load_mmlongbench(limit=limit, skip_unanswerable=skip_unanswerable)
+        samples = load_mmlongbench(limit=limit, skip_unanswerable=False)
     print(f"Loaded {len(samples)} samples")
 
     # Load skills
@@ -480,32 +479,56 @@ def run_benchmark(limit: int = None,
                 "score": score_skill
             })
 
-    # Evaluate
-    eval_baseline = evaluate_batch(results_baseline)
-    eval_skill = evaluate_batch(results_skill) if results_skill else None
+    # Separate results into all vs answerable-only
+    results_baseline_answerable = [r for r in results_baseline if r["ground_truth"] != "Not answerable"]
+    results_skill_answerable = [r for r in results_skill if r["ground_truth"] != "Not answerable"] if results_skill else []
+
+    # Evaluate all
+    eval_baseline_all = evaluate_batch(results_baseline)
+    eval_skill_all = evaluate_batch(results_skill) if results_skill else None
+
+    # Evaluate answerable only
+    eval_baseline_ans = evaluate_batch(results_baseline_answerable) if results_baseline_answerable else None
+    eval_skill_ans = evaluate_batch(results_skill_answerable) if results_skill_answerable else None
+
+    num_unanswerable = len(results_baseline) - len(results_baseline_answerable)
 
     # Print summary
     print("\n" + "=" * 70)
     print("RESULTS SUMMARY")
     print("=" * 70)
+    print(f"\nTotal: {len(results_baseline)} samples ({num_unanswerable} unanswerable)")
 
+    print(f"\n{'='*35} ALL QUESTIONS {'='*35}")
     print(f"\nBaseline:")
-    print(f"  Accuracy: {eval_baseline['accuracy']:.1%} ({eval_baseline['total_score']:.1f}/{eval_baseline['total']})")
+    print(f"  Accuracy: {eval_baseline_all['accuracy']:.1%} ({eval_baseline_all['total_score']:.1f}/{eval_baseline_all['total']})")
     print(f"  By Format:")
-    for fmt, acc in eval_baseline['by_format'].items():
-        detail = eval_baseline['by_format_detail'][fmt]
+    for fmt, acc in eval_baseline_all['by_format'].items():
+        detail = eval_baseline_all['by_format_detail'][fmt]
         print(f"    {fmt}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
-    if eval_skill:
+    if eval_skill_all:
         print(f"\nWith Skill:")
-        print(f"  Accuracy: {eval_skill['accuracy']:.1%} ({eval_skill['total_score']:.1f}/{eval_skill['total']})")
+        print(f"  Accuracy: {eval_skill_all['accuracy']:.1%} ({eval_skill_all['total_score']:.1f}/{eval_skill_all['total']})")
         print(f"  By Format:")
-        for fmt, acc in eval_skill['by_format'].items():
-            detail = eval_skill['by_format_detail'][fmt]
+        for fmt, acc in eval_skill_all['by_format'].items():
+            detail = eval_skill_all['by_format_detail'][fmt]
             print(f"    {fmt}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
-        improvement = eval_skill['accuracy'] - eval_baseline['accuracy']
-        print(f"\nImprovement: {improvement:+.1%}")
+        improvement = eval_skill_all['accuracy'] - eval_baseline_all['accuracy']
+        print(f"\n  Improvement: {improvement:+.1%}")
+
+    if eval_baseline_ans:
+        print(f"\n{'='*30} ANSWERABLE ONLY ({len(results_baseline_answerable)}) {'='*30}")
+        print(f"\nBaseline:")
+        print(f"  Accuracy: {eval_baseline_ans['accuracy']:.1%} ({eval_baseline_ans['total_score']:.1f}/{eval_baseline_ans['total']})")
+
+        if eval_skill_ans:
+            print(f"\nWith Skill:")
+            print(f"  Accuracy: {eval_skill_ans['accuracy']:.1%} ({eval_skill_ans['total_score']:.1f}/{eval_skill_ans['total']})")
+
+            improvement_ans = eval_skill_ans['accuracy'] - eval_baseline_ans['accuracy']
+            print(f"\n  Improvement: {improvement_ans:+.1%}")
 
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -513,18 +536,33 @@ def run_benchmark(limit: int = None,
         "timestamp": timestamp,
         "model": model,
         "num_samples": len(samples),
-        "baseline": {
-            "accuracy": eval_baseline['accuracy'],
-            "results": results_baseline
+        "num_unanswerable": num_unanswerable,
+        "all_questions": {
+            "baseline": {
+                "accuracy": eval_baseline_all['accuracy'],
+                "results": results_baseline
+            }
         },
+        "answerable_only": {
+            "num_samples": len(results_baseline_answerable),
+            "baseline": {
+                "accuracy": eval_baseline_ans['accuracy'] if eval_baseline_ans else 0
+            }
+        }
     }
 
-    if eval_skill:
-        output["skill"] = {
-            "accuracy": eval_skill['accuracy'],
+    if eval_skill_all:
+        output["all_questions"]["skill"] = {
+            "accuracy": eval_skill_all['accuracy'],
             "results": results_skill
         }
-        output["improvement"] = eval_skill['accuracy'] - eval_baseline['accuracy']
+        output["all_questions"]["improvement"] = eval_skill_all['accuracy'] - eval_baseline_all['accuracy']
+
+    if eval_skill_ans:
+        output["answerable_only"]["skill"] = {
+            "accuracy": eval_skill_ans['accuracy']
+        }
+        output["answerable_only"]["improvement"] = eval_skill_ans['accuracy'] - eval_baseline_ans['accuracy']
 
     output_file = f"mmlongbench_results_{timestamp}.json"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -541,8 +579,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MMLongBench-Doc Skill Benchmark")
     parser.add_argument("--limit", type=int, default=None,
                         help="Number of samples (default: all)")
-    parser.add_argument("--skip-unanswerable", action="store_true",
-                        help="Skip 'Not answerable' questions")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929")
     parser.add_argument("--sample", action="store_true",
                         help="Use sample data for testing")
@@ -561,7 +597,6 @@ if __name__ == "__main__":
 
     run_benchmark(
         limit=args.limit,
-        skip_unanswerable=args.skip_unanswerable,
         model=args.model,
         use_sample=args.sample,
         use_images=use_images,

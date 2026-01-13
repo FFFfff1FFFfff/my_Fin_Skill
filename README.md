@@ -36,8 +36,8 @@ python finqa/runner.py --source test.json --limit 50
 # SealQA - enable web search
 python sealqa/runner.py --search --backend builtin --limit 10
 
-# MMLongBench - skip unanswerable
-python mmlongbench/runner.py --skip-unanswerable --limit 50
+# MMLongBench - reports both all & answerable-only metrics
+python mmlongbench/runner.py --official --limit 50
 
 # ChartQAPro - filter by type
 python chartqapro/runner.py --type Reasoning --limit 50
