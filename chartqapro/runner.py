@@ -3,11 +3,14 @@
 ChartQAPro benchmark runner: compare baseline vs with-skill performance
 Chart Question Answering with visual and logical reasoning
 
-Skill approach: Extract → Table → Reason → Strict Answer
+Skill approach: Hybrid strategy
+- Visual pattern questions → direct vision with step-by-step
+- Calculation questions → extract data then compute
 """
 
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -20,35 +23,37 @@ from evaluator import relaxed_correctness, evaluate_batch
 client = Anthropic()
 
 
-def create_image_message(image_base64: str, text: str, system_prompt: str = None) -> dict:
+def create_image_message(image_base64: str, text: str) -> dict:
     """Create a message with image content for Claude API."""
-    user_content = [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/png",
-                "data": image_base64
-            }
-        },
-        {
-            "type": "text",
-            "text": text
-        }
+    return {
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_base64}},
+                {"type": "text", "text": text}
+            ]
+        }]
+    }
+
+
+def extract_answer(text: str) -> str:
+    """Extract clean answer from response."""
+    answer = text.strip().split('\n')[0].strip()
+    for prefix in ["Answer:", "The answer is", "A:", "answer:", "**", "Final answer:"]:
+        if answer.lower().startswith(prefix.lower()):
+            answer = answer[len(prefix):].strip()
+    return answer.rstrip('*').strip()
+
+
+def is_calculation_question(question: str) -> bool:
+    """Determine if question requires calculation vs visual pattern recognition."""
+    calc_patterns = [
+        r'\bdifference\b', r'\bhow many times\b', r'\bpercentage\b',
+        r'\bcalculate\b', r'\bsum\b', r'\btotal\b', r'\baverage\b',
+        r'\bratio\b', r'\bcompare\b.*\bvalues?\b'
     ]
-
-    return {
-        "messages": [{"role": "user", "content": user_content}],
-        "system": system_prompt
-    }
-
-
-def create_text_message(text: str, system_prompt: str = None) -> dict:
-    """Create a text-only message for Claude API."""
-    return {
-        "messages": [{"role": "user", "content": text}],
-        "system": system_prompt
-    }
+    q_lower = question.lower()
+    return any(re.search(p, q_lower) for p in calc_patterns)
 
 
 # =============================================================================
@@ -57,9 +62,7 @@ def create_text_message(text: str, system_prompt: str = None) -> dict:
 
 def ask_baseline(image_base64: str, questions: list, question_type: str,
                  model: str = "claude-sonnet-4-5-20250929") -> list:
-    """
-    Baseline: direct questions without skills.
-    """
+    """Baseline: direct questions without skills."""
     format_hints = {
         "Fact Checking": "Output ONLY 'True' or 'False'. No explanation.",
         "Multi Choice": "Output ONLY the letter (A, B, C, or D). No explanation.",
@@ -73,14 +76,9 @@ def ask_baseline(image_base64: str, questions: list, question_type: str,
 
     for question in questions:
         hint = format_hints.get(question_type, "Output ONLY the answer. No explanation.")
-
-        # Build conversation context
         context = ""
         if question_type == "Conversational" and conversation_history:
-            context = "Previous:\n"
-            for prev_q, prev_a in conversation_history:
-                context += f"Q: {prev_q}\nA: {prev_a}\n"
-            context += "\n"
+            context = "Previous:\n" + "\n".join(f"Q: {q}\nA: {a}" for q, a in conversation_history) + "\n\n"
 
         prompt = f"""{context}Question: {question}
 
@@ -89,25 +87,11 @@ Do NOT explain. Do NOT describe what you see. Just output the answer directly.
 
 Answer:"""
 
-        msg_data = create_image_message(image_base64, prompt)
-
         response = client.messages.create(
-            model=model,
-            max_tokens=50,
-            temperature=0,
-            messages=msg_data["messages"]
+            model=model, max_tokens=50, temperature=0,
+            messages=create_image_message(image_base64, prompt)["messages"]
         )
-
-        answer = response.content[0].text.strip()
-        # Take first line only
-        answer = answer.split('\n')[0].strip()
-        # Remove prefixes
-        for prefix in ["Answer:", "The answer is", "A:", "answer:", "**"]:
-            if answer.lower().startswith(prefix.lower()):
-                answer = answer[len(prefix):].strip()
-        # Remove trailing **
-        answer = answer.rstrip('*').strip()
-
+        answer = extract_answer(response.content[0].text)
         answers.append(answer)
         conversation_history.append((question, answer))
 
@@ -115,129 +99,65 @@ Answer:"""
 
 
 # =============================================================================
-# SKILL: Extract → Table → Reason → Strict Answer
+# SKILL: Hybrid approach
 # =============================================================================
-
-def extract_chart_data(image_base64: str, model: str = "claude-sonnet-4-5-20250929") -> str:
-    """
-    Stage 1: Extract all data from chart into structured table.
-
-    This separates the visual reading task from reasoning.
-    """
-    prompt = """Look at this chart and extract ALL the data into a structured table.
-
-Instructions:
-1. Identify the chart type (bar, line, pie, etc.)
-2. Extract ALL data points with their exact values
-3. Include axis labels, legend items, and any text annotations
-4. Format as a markdown table or JSON
-
-Output format:
-CHART TYPE: [type]
-DATA:
-| Category | Value |
-|----------|-------|
-| ... | ... |
-
-Extract every visible number and label. Be precise with numbers."""
-
-    msg_data = create_image_message(image_base64, prompt)
-
-    response = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        temperature=0,
-        messages=msg_data["messages"]
-    )
-
-    return response.content[0].text.strip()
-
-
-def reason_from_table(extracted_data: str, question: str, question_type: str,
-                      model: str = "claude-sonnet-4-5-20250929",
-                      conversation_history: list = None) -> str:
-    """
-    Stage 2: Answer question based on extracted table data.
-
-    No image needed - pure text reasoning.
-    """
-    format_rules = {
-        "Fact Checking": "Output ONLY: True or False",
-        "Multi Choice": "Output ONLY: the letter (A, B, C, or D)",
-        "Reasoning": "Output ONLY: the number or short answer",
-        "Hypothetical": "Output ONLY: the short answer",
-        "Conversational": "Output ONLY: the short answer",
-    }
-
-    rule = format_rules.get(question_type, "Output ONLY the answer")
-
-    # Build conversation context
-    context = ""
-    if conversation_history:
-        context = "Previous Q&A:\n"
-        for prev_q, prev_a in conversation_history:
-            context += f"Q: {prev_q} → A: {prev_a}\n"
-        context += "\n"
-
-    prompt = f"""Based on the extracted chart data below, answer the question.
-
-=== EXTRACTED CHART DATA ===
-{extracted_data}
-=== END DATA ===
-
-{context}Question: {question}
-
-Rules:
-- Use ONLY the data above to answer
-- {rule}
-- No explanation, no units unless required
-- If the answer is a number, give the exact number from the data
-
-Answer:"""
-
-    msg_data = create_text_message(prompt)
-
-    response = client.messages.create(
-        model=model,
-        max_tokens=50,
-        temperature=0,
-        messages=msg_data["messages"]
-    )
-
-    answer = response.content[0].text.strip()
-    # Take first line, remove prefixes
-    answer = answer.split('\n')[0].strip()
-    for prefix in ["Answer:", "The answer is", "A:"]:
-        if answer.lower().startswith(prefix.lower()):
-            answer = answer[len(prefix):].strip()
-
-    return answer
-
 
 def ask_with_skill(image_base64: str, questions: list, question_type: str,
                    model: str = "claude-sonnet-4-5-20250929") -> tuple[list, str]:
     """
-    Skill approach: Extract → Table → Reason → Strict Answer
-
-    Returns:
-        tuple: (list of answers, extracted_data)
+    Hybrid skill approach:
+    - Calculation questions → extract data first, then compute
+    - Visual pattern questions → step-by-step visual reasoning
     """
-    # Stage 1: Extract data (only once per image)
-    extracted_data = extract_chart_data(image_base64, model)
-
-    # Stage 2: Reason from table for each question
     answers = []
     conversation_history = []
+    method_used = ""
 
     for question in questions:
-        answer = reason_from_table(
-            extracted_data, question, question_type, model,
-            conversation_history=conversation_history if question_type == "Conversational" else None
+        context = ""
+        if question_type == "Conversational" and conversation_history:
+            context = "Previous:\n" + "\n".join(f"Q: {q}\nA: {a}" for q, a in conversation_history) + "\n\n"
+
+        if is_calculation_question(question):
+            # Calculation: extract relevant data, then compute
+            method_used = "calculation"
+            prompt = f"""{context}Question: {question}
+
+Step 1: Read the relevant values from the chart
+Step 2: Perform the calculation
+Step 3: Output ONLY the final answer
+
+Think step by step, then output ONLY the final number/value on the last line.
+No explanation after the answer.
+
+Answer:"""
+        else:
+            # Visual pattern: direct observation with careful reading
+            method_used = "visual"
+            prompt = f"""{context}Question: {question}
+
+Look carefully at the chart. Read the exact values/labels needed to answer.
+Output ONLY the answer. No explanation.
+
+Answer:"""
+
+        response = client.messages.create(
+            model=model, max_tokens=150, temperature=0,
+            messages=create_image_message(image_base64, prompt)["messages"]
         )
+
+        # For calculation, take last line (after reasoning)
+        text = response.content[0].text.strip()
+        if is_calculation_question(question):
+            lines = [l.strip() for l in text.split('\n') if l.strip()]
+            answer = extract_answer(lines[-1]) if lines else ""
+        else:
+            answer = extract_answer(text)
+
         answers.append(answer)
         conversation_history.append((question, answer))
 
-    return answers, extracted_data
+    return answers, method_used
 
 
 # =============================================================================
@@ -255,7 +175,7 @@ def run_benchmark(limit: int = None,
     print("=" * 70)
     print("ChartQAPro Skill Benchmark")
     print("=" * 70)
-    print("\nSkill: Extract → Table → Reason → Strict Answer")
+    print("\nSkill: Hybrid (calc→step-by-step, visual→direct)")
 
     # Load data
     print(f"\nLoading data (limit={limit})...")
@@ -318,14 +238,14 @@ def run_benchmark(limit: int = None,
         # With skill
         if use_skill:
             try:
-                pred_skill, extracted_data = ask_with_skill(
+                pred_skill, method = ask_with_skill(
                     image_base64, questions, question_type, model
                 )
                 score_skill = relaxed_correctness(answers, pred_skill, year_flags, question_type)
-                print(f"Skill:    {pred_skill[-1][:40]} -> {score_skill:.2f}")
+                print(f"Skill({method[:4]}): {pred_skill[-1][:35]} -> {score_skill:.2f}")
             except Exception as e:
                 pred_skill = [""] * len(questions)
-                extracted_data = ""
+                method = ""
                 score_skill = 0.0
                 print(f"Skill:    ERROR - {e}")
 
@@ -336,7 +256,7 @@ def run_benchmark(limit: int = None,
                 "question_type": question_type,
                 "year_flags": year_flags,
                 "predictions": pred_skill,
-                "extracted_data": extracted_data,
+                "method": method,
                 "score": score_skill
             })
 
@@ -357,7 +277,7 @@ def run_benchmark(limit: int = None,
         print(f"    {q_type}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
     if eval_skill:
-        print(f"\nWith Skill (Extract→Table→Reason):")
+        print(f"\nWith Skill (Hybrid):")
         print(f"  Accuracy: {eval_skill['accuracy']:.1%} ({eval_skill['total_score']:.1f}/{eval_skill['total']})")
         print(f"  By Question Type:")
         for q_type, acc in sorted(eval_skill['by_type'].items()):
