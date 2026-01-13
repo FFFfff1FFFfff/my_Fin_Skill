@@ -61,18 +61,18 @@ def ask_baseline(image_base64: str, questions: list, question_type: str,
     Baseline: direct questions without skills.
     """
     format_hints = {
-        "Fact Checking": "Answer with ONLY 'True' or 'False', nothing else.",
-        "Multi Choice": "Answer with ONLY the letter (A, B, C, or D), nothing else.",
-        "Reasoning": "Answer with ONLY the value/number, nothing else.",
-        "Hypothetical": "Answer concisely with ONLY the answer, nothing else.",
-        "Conversational": "Answer concisely with ONLY the answer, nothing else.",
+        "Fact Checking": "Output ONLY 'True' or 'False'. No explanation.",
+        "Multi Choice": "Output ONLY the letter (A, B, C, or D). No explanation.",
+        "Reasoning": "Output ONLY the number or value. No explanation.",
+        "Hypothetical": "Output ONLY the short answer. No explanation.",
+        "Conversational": "Output ONLY the short answer. No explanation.",
     }
 
     answers = []
     conversation_history = []
 
     for question in questions:
-        hint = format_hints.get(question_type, "Answer concisely.")
+        hint = format_hints.get(question_type, "Output ONLY the answer. No explanation.")
 
         # Build conversation context
         context = ""
@@ -84,7 +84,8 @@ def ask_baseline(image_base64: str, questions: list, question_type: str,
 
         prompt = f"""{context}Question: {question}
 
-{hint}
+IMPORTANT: {hint}
+Do NOT explain. Do NOT describe what you see. Just output the answer directly.
 
 Answer:"""
 
@@ -92,7 +93,7 @@ Answer:"""
 
         response = client.messages.create(
             model=model,
-            max_tokens=100,
+            max_tokens=50,
             temperature=0,
             messages=msg_data["messages"]
         )
@@ -101,9 +102,11 @@ Answer:"""
         # Take first line only
         answer = answer.split('\n')[0].strip()
         # Remove prefixes
-        for prefix in ["Answer:", "The answer is", "A:", "answer:"]:
+        for prefix in ["Answer:", "The answer is", "A:", "answer:", "**"]:
             if answer.lower().startswith(prefix.lower()):
                 answer = answer[len(prefix):].strip()
+        # Remove trailing **
+        answer = answer.rstrip('*').strip()
 
         answers.append(answer)
         conversation_history.append((question, answer))
