@@ -3,14 +3,11 @@
 ChartQAPro benchmark runner: compare baseline vs with-skill performance
 Chart Question Answering with visual and logical reasoning
 
-Skill approach: Hybrid strategy
-- Visual pattern questions → direct vision with step-by-step
-- Calculation questions → extract data then compute
+Skill approach: Careful reading with verification
 """
 
 import json
 import os
-import re
 import sys
 from datetime import datetime
 
@@ -43,17 +40,6 @@ def extract_answer(text: str) -> str:
         if answer.lower().startswith(prefix.lower()):
             answer = answer[len(prefix):].strip()
     return answer.rstrip('*').strip()
-
-
-def is_calculation_question(question: str) -> bool:
-    """Determine if question requires calculation vs visual pattern recognition."""
-    calc_patterns = [
-        r'\bdifference\b', r'\bhow many times\b', r'\bpercentage\b',
-        r'\bcalculate\b', r'\bsum\b', r'\btotal\b', r'\baverage\b',
-        r'\bratio\b', r'\bcompare\b.*\bvalues?\b'
-    ]
-    q_lower = question.lower()
-    return any(re.search(p, q_lower) for p in calc_patterns)
 
 
 # =============================================================================
@@ -99,65 +85,44 @@ Answer:"""
 
 
 # =============================================================================
-# SKILL: Hybrid approach
+# SKILL: Careful reading with verification
 # =============================================================================
 
 def ask_with_skill(image_base64: str, questions: list, question_type: str,
                    model: str = "claude-sonnet-4-5-20250929") -> tuple[list, str]:
     """
-    Hybrid skill approach:
-    - Calculation questions → extract data first, then compute
-    - Visual pattern questions → step-by-step visual reasoning
+    Skill: Read carefully, verify, then answer.
+    Single approach - no classification needed.
     """
     answers = []
     conversation_history = []
-    method_used = ""
 
     for question in questions:
         context = ""
         if question_type == "Conversational" and conversation_history:
             context = "Previous:\n" + "\n".join(f"Q: {q}\nA: {a}" for q, a in conversation_history) + "\n\n"
 
-        if is_calculation_question(question):
-            # Calculation: extract relevant data, then compute
-            method_used = "calculation"
-            prompt = f"""{context}Question: {question}
+        prompt = f"""{context}Question: {question}
 
-Step 1: Read the relevant values from the chart
-Step 2: Perform the calculation
-Step 3: Output ONLY the final answer
+Instructions:
+1. Read the chart carefully
+2. Find the specific data points needed
+3. Verify your reading is correct
 
-Think step by step, then output ONLY the final number/value on the last line.
-No explanation after the answer.
-
-Answer:"""
-        else:
-            # Visual pattern: direct observation with careful reading
-            method_used = "visual"
-            prompt = f"""{context}Question: {question}
-
-Look carefully at the chart. Read the exact values/labels needed to answer.
-Output ONLY the answer. No explanation.
+Output ONLY the final answer. No explanation.
 
 Answer:"""
 
         response = client.messages.create(
-            model=model, max_tokens=150, temperature=0,
+            model=model, max_tokens=50, temperature=0,
             messages=create_image_message(image_base64, prompt)["messages"]
         )
 
-        # For calculation, take last line (after reasoning)
-        text = response.content[0].text.strip()
-        if is_calculation_question(question):
-            lines = [l.strip() for l in text.split('\n') if l.strip()]
-            answer = extract_answer(lines[-1]) if lines else ""
-        else:
-            answer = extract_answer(text)
-
+        answer = extract_answer(response.content[0].text)
         answers.append(answer)
         conversation_history.append((question, answer))
 
-    return answers, method_used
+    return answers, "careful"
 
 
 # =============================================================================
@@ -175,7 +140,7 @@ def run_benchmark(limit: int = None,
     print("=" * 70)
     print("ChartQAPro Skill Benchmark")
     print("=" * 70)
-    print("\nSkill: Hybrid (calc→step-by-step, visual→direct)")
+    print("\nSkill: Careful reading with verification")
 
     # Load data
     print(f"\nLoading data (limit={limit})...")
@@ -277,7 +242,7 @@ def run_benchmark(limit: int = None,
         print(f"    {q_type}: {acc:.1%} ({detail['total_score']:.1f}/{detail['count']})")
 
     if eval_skill:
-        print(f"\nWith Skill (Hybrid):")
+        print(f"\nWith Skill (Careful):")
         print(f"  Accuracy: {eval_skill['accuracy']:.1%} ({eval_skill['total_score']:.1f}/{eval_skill['total']})")
         print(f"  By Question Type:")
         for q_type, acc in sorted(eval_skill['by_type'].items()):
