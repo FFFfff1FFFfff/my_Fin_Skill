@@ -102,40 +102,50 @@ output_file = r"{output_path}"
 
 
 # =============================================================================
-# BASELINE: Simple single-round (matching original paper)
+# BASELINE: Single-round (aligned with official inference_single.py)
 # =============================================================================
 
-PROMPT_BASELINE = """You are a spreadsheet expert. Write Python code using openpyxl to solve this task.
+PROMPT_FORMAT_SINGLE = """You are a spreadsheet manipulation agent. I will provide you with six types of information:
+1. Instruction: the instruction of the spreadsheet manipulation task
+2. Spreadsheet Path: the path of the spreadsheet file to be manipulated
+3. Spreadsheet Content: the content of the spreadsheet file (first rows of each sheet)
+4. Instruction Type: the type of the instruction (Cell-Level or Sheet-Level Manipulation)
+5. Answer Position: the cell range where the answer should be written
+6. Output Path: the path of the output spreadsheet file
 
-Task: {instruction}
-Type: {instruction_type}
-Output to: {answer_position}
+Instruction: {instruction}
+Spreadsheet Path: {spreadsheet_path}
+Spreadsheet Content:
+{spreadsheet_content}
+Instruction Type: {instruction_type}
+Answer Position: {answer_position}
+Output Path: {output_path}
 
-Spreadsheet preview (first rows):
-{preview}
-
-Requirements:
-- Load workbook from `file_path` variable
-- Save to same file after modification
-- The code runs on 3 test files with same structure but different data
+Please generate Python code for the final solution. Use openpyxl library.
+The code should:
+1. Load the workbook from the spreadsheet path
+2. Perform the required manipulation
+3. Save the result to the output path
 
 ```python
 from openpyxl import load_workbook
 
-wb = load_workbook(file_path)
+wb = load_workbook("{spreadsheet_path}")
 # Your code here
-wb.save(file_path)
+wb.save("{output_path}")
 ```
 """
 
 
 def generate_baseline(sample: dict, model: str = DEFAULT_MODEL) -> str:
-    """Single-round code generation."""
-    prompt = PROMPT_BASELINE.format(
+    """Single-round code generation (aligned with official inference_single.py)."""
+    prompt = PROMPT_FORMAT_SINGLE.format(
         instruction=sample["instruction"],
+        spreadsheet_path="file_path",  # Use variable name
+        spreadsheet_content=sample.get("preview", "")[:2000],
         instruction_type=sample["instruction_type"],
         answer_position=sample["answer_position"],
-        preview=sample.get("preview", "")[:1500],  # Limit preview size
+        output_path="file_path",  # Same as input for our setup
     )
     response = call_claude([{"role": "user", "content": prompt}], model=model)
     return extract_code(response)
@@ -146,33 +156,39 @@ def generate_baseline(sample: dict, model: str = DEFAULT_MODEL) -> str:
 # https://github.com/RUCKBReasoning/SpreadsheetBench/blob/main/inference/inference_multiple.py
 # =============================================================================
 
-PROMPT_REACT_INIT = """You are a spreadsheet expert. Write Python code using openpyxl to complete the task.
+PROMPT_DF_RCT_FORMAT = """You are a spreadsheet manipulation agent. I will provide you with six types of information:
+1. Instruction: the instruction of the spreadsheet manipulation task
+2. Spreadsheet Path: the path of the spreadsheet file to be manipulated
+3. Spreadsheet Content: the content of the spreadsheet file (first rows of each sheet)
+4. Instruction Type: the type of the instruction (Cell-Level or Sheet-Level Manipulation)
+5. Answer Position: the cell range where the answer should be written
+6. Output Path: the path of the output spreadsheet file
 
-Task: {instruction}
+Instruction: {instruction}
+Spreadsheet Path: {spreadsheet_path}
+Spreadsheet Content:
+{spreadsheet_content}
 Instruction Type: {instruction_type}
-Write Answer To: {answer_position}
+Answer Position: {answer_position}
+Output Path: {output_path}
 
-Spreadsheet content (first rows):
-{preview}
+The solution can be generated through {max_turn_num} rounds of interaction.
+In each round, you can choose one of the following two actions:
+1. Generate Python code to explore the spreadsheet or test your solution
+2. Generate the final Python code solution
 
-Requirements:
-- The spreadsheet is loaded from variable `file_path`
-- After modification, save to the same `file_path`
-- Your code will run on 3 test files with same structure but different data
+After each code execution, I will provide you with the execution result.
+If there are errors, please fix them in the next round.
 
-Write Python code:
+Please generate Python code using openpyxl library:
 ```python
 from openpyxl import load_workbook
 
-wb = load_workbook(file_path)
+wb = load_workbook("{spreadsheet_path}")
 # Your code here
-wb.save(file_path)
-```"""
-
-PROMPT_REACT_FEEDBACK = """Execution result:
-{result}
-
-{instruction}"""
+wb.save("{output_path}")
+```
+"""
 
 
 def generate_react(
@@ -184,17 +200,20 @@ def generate_react(
 ) -> tuple:
     """
     Multi-round code generation with execution feedback.
-    Aligned with official inference_multiple.py approach.
+    Aligned with official inference_multiple.py (row_react_exec setting).
     """
     messages = []
     turns_used = 0
 
-    # Initial prompt
-    init_prompt = PROMPT_REACT_INIT.format(
+    # Initial prompt (aligned with PROMPT_DF_RCT_FORMAT)
+    init_prompt = PROMPT_DF_RCT_FORMAT.format(
         instruction=sample["instruction"],
+        spreadsheet_path="file_path",
+        spreadsheet_content=sample.get("preview", "")[:2000],
         instruction_type=sample["instruction_type"],
         answer_position=sample["answer_position"],
-        preview=sample.get("preview", "")[:2000],
+        output_path="file_path",
+        max_turn_num=max_turns,
     )
     messages.append({"role": "user", "content": init_prompt})
 
@@ -215,28 +234,22 @@ def generate_react(
         if not test_input or not test_output:
             break
 
-        # Execute code and get feedback
+        # Execute code and get feedback (aligned with official approach)
         result = execute_code(code, test_input, test_output)
 
+        # Check if output file exists - if so, we're done
+        if os.path.exists(test_output) and result["success"]:
+            break
+
+        # Append execution result as feedback (matching official script pattern)
         if result["success"]:
-            # Check if output file exists and has been modified
-            if os.path.exists(test_output):
-                # Success - code ran and produced output
-                break
-            else:
-                # Code ran but didn't produce output
-                feedback = PROMPT_REACT_FEEDBACK.format(
-                    result="Code executed but output file was not created.",
-                    instruction="Please fix the code to save the workbook correctly."
-                )
-                messages.append({"role": "user", "content": feedback})
+            exec_result = result.get("output", "Code executed successfully.")
+            if not exec_result.strip():
+                exec_result = "Code executed successfully. No output."
         else:
-            # Code failed with error
-            feedback = PROMPT_REACT_FEEDBACK.format(
-                result=f"Error: {result['error']}",
-                instruction="Please fix the code to resolve this error."
-            )
-            messages.append({"role": "user", "content": feedback})
+            exec_result = f"Error occur when running code.\n{result['error']}"
+
+        messages.append({"role": "user", "content": exec_result})
 
     return final_code, turns_used
 
