@@ -54,17 +54,34 @@ def call_claude(messages: list, model: str = DEFAULT_MODEL, max_tokens: int = 40
     return response.content[0].text
 
 
-def execute_code(code: str, input_path: str, output_path: str, timeout: int = 30) -> dict:
-    """Execute Python code and return result."""
-    try:
-        shutil.copy(input_path, output_path)
-    except Exception as e:
-        return {"success": False, "error": f"Copy failed: {e}"}
+def execute_code(code: str, input_path: str, output_path: str, timeout: int = 30, copy_first: bool = True) -> dict:
+    """Execute Python code and return result.
 
-    wrapper = f'''
+    Args:
+        copy_first: If True, copy input to output before execution (for evaluation).
+                   If False, code must save to output_file itself (for React).
+    """
+    if copy_first:
+        try:
+            shutil.copy(input_path, output_path)
+        except Exception as e:
+            return {"success": False, "error": f"Copy failed: {e}"}
+        # Code uses file_path (same as output)
+        wrapper = f'''
 import sys
 sys.path.insert(0, '.')
 file_path = r"{output_path}"
+input_file = r"{input_path}"
+output_file = r"{output_path}"
+
+{code}
+'''
+    else:
+        # Code must load from input_file and save to output_file
+        wrapper = f'''
+import sys
+sys.path.insert(0, '.')
+file_path = r"{input_path}"
 input_file = r"{input_path}"
 output_file = r"{output_path}"
 
@@ -163,15 +180,15 @@ After each code execution, I will provide you with the execution result.
 If there are errors, please fix them in the next round.
 
 Please generate Python code using openpyxl library.
-- The spreadsheet is available via the `file_path` variable
-- Save to the same `file_path` after modification
+- Load the spreadsheet from `input_file` variable
+- Save the result to `output_file` variable
 
 ```python
 from openpyxl import load_workbook
 
-wb = load_workbook(file_path)
+wb = load_workbook(input_file)
 # Your code here
-wb.save(file_path)
+wb.save(output_file)
 ```
 """
 
@@ -221,8 +238,8 @@ def generate_react(
         if os.path.exists(test_output):
             os.remove(test_output)
 
-        # Execute code and get feedback (aligned with official approach)
-        result = execute_code(code, test_input, test_output)
+        # Execute code with copy_first=False (code must save to output_file)
+        result = execute_code(code, test_input, test_output, copy_first=False)
 
         # Get execution result (matching official script pattern)
         try:
