@@ -234,22 +234,30 @@ def generate_react(
         if not test_input or not test_output:
             break
 
+        # Remove old output before execution (so we can check if code creates it)
+        if os.path.exists(test_output):
+            os.remove(test_output)
+
         # Execute code and get feedback (aligned with official approach)
         result = execute_code(code, test_input, test_output)
 
-        # Check if output file exists - if so, we're done
+        # Get execution result (matching official script pattern)
+        try:
+            if result["success"]:
+                exec_result = result.get("output", "")
+                if not exec_result.strip():
+                    exec_result = "Code executed successfully."
+            else:
+                exec_result = f"Error occur when running code.\n{result['error']}"
+        except Exception:
+            exec_result = "Error occur when running code."
+
+        # Append execution result to messages (official always appends)
+        messages.append({"role": "user", "content": exec_result})
+
+        # Check if output file exists AND code succeeded - then we're done
         if os.path.exists(test_output) and result["success"]:
             break
-
-        # Append execution result as feedback (matching official script pattern)
-        if result["success"]:
-            exec_result = result.get("output", "Code executed successfully.")
-            if not exec_result.strip():
-                exec_result = "Code executed successfully. No output."
-        else:
-            exec_result = f"Error occur when running code.\n{result['error']}"
-
-        messages.append({"role": "user", "content": exec_result})
 
     return final_code, turns_used
 
