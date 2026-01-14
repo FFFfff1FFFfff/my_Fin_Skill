@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """
 Evaluator for SpreadsheetBench benchmark.
+Aligned with official evaluation: https://github.com/RUCKBReasoning/SpreadsheetBench/blob/main/evaluation/evaluation.py
 
-Implements OJ-style evaluation:
+OJ-style evaluation:
 - Each instruction has multiple test cases (usually 3)
-- The generated code must produce correct output for ALL test cases
 - Soft Restriction: % of test cases that pass
 - Hard Restriction: 1 if all pass, 0 otherwise
-
-Cell comparison includes:
-- Cell values (numbers rounded to 2 decimals)
-- Fill colors (optional)
-- Font colors (optional)
 """
 
 import os
@@ -22,16 +17,23 @@ from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
 
 
-def normalize_value(value) -> Union[str, float, None]:
-    """Normalize cell value for comparison."""
+def transform_value(value) -> Union[str, float, None]:
+    """
+    Transform cell value for comparison (aligned with official script).
+    - Numeric values rounded to 2 decimals
+    - Datetime converted to Excel serial format
+    - Time values truncated to milliseconds
+    - String numbers parsed as floats when possible
+    """
     if value is None:
         return None
 
+    if value == "":
+        return ""
+
     # Handle numbers - round to 2 decimals
     if isinstance(value, (int, float)):
-        if isinstance(value, float):
-            return round(value, 2)
-        return float(value)
+        return round(float(value), 2)
 
     # Handle datetime - convert to Excel serial number
     if isinstance(value, datetime):
@@ -39,15 +41,40 @@ def normalize_value(value) -> Union[str, float, None]:
         delta = value - datetime(1899, 12, 30)
         return round(delta.days + delta.seconds / 86400, 2)
 
-    # Handle time - convert to string
+    # Handle time - truncate to milliseconds and convert to string
     if isinstance(value, time):
         return value.strftime("%H:%M:%S")
 
-    # Handle strings - strip whitespace and lowercase for comparison
+    # Handle strings
     if isinstance(value, str):
-        return value.strip()
+        value = value.strip()
+        # Try to parse as float
+        try:
+            return round(float(value), 2)
+        except ValueError:
+            return value
 
     return str(value)
+
+
+def compare_cell_value(v1, v2) -> bool:
+    """
+    Compare two cell values (aligned with official script).
+    """
+    v1 = transform_value(v1)
+    v2 = transform_value(v2)
+
+    # Handle empty/None equivalence
+    if (v1 == "" and v2 is None) or (v1 is None and v2 == ""):
+        return True
+    if (v1 == "" and v2 == "") or (v1 is None and v2 is None):
+        return True
+
+    # Type mismatch
+    if type(v1) != type(v2):
+        return False
+
+    return v1 == v2
 
 
 def parse_answer_position(answer_position: str) -> tuple:
@@ -75,9 +102,10 @@ def parse_answer_position(answer_position: str) -> tuple:
 
 def get_cell_range_values(ws, cell_range: Optional[str]) -> dict:
     """
-    Extract values from a cell range in a worksheet.
+    Extract raw values from a cell range in a worksheet.
+    Values are NOT transformed here - transformation happens in compare_cell_value.
 
-    Returns dict mapping (row, col) -> normalized_value
+    Returns dict mapping (row, col) -> raw_value
     """
     values = {}
 
@@ -85,8 +113,7 @@ def get_cell_range_values(ws, cell_range: Optional[str]) -> dict:
         # Get all cells with values
         for row in ws.iter_rows():
             for cell in row:
-                if cell.value is not None:
-                    values[(cell.row, cell.column)] = normalize_value(cell.value)
+                values[(cell.row, cell.column)] = cell.value
     else:
         try:
             # Parse range like "A1:D10"
@@ -95,23 +122,22 @@ def get_cell_range_values(ws, cell_range: Optional[str]) -> dict:
             for row in range(min_row, max_row + 1):
                 for col in range(min_col, max_col + 1):
                     cell = ws.cell(row=row, column=col)
-                    if cell.value is not None:
-                        values[(row, col)] = normalize_value(cell.value)
+                    values[(row, col)] = cell.value
         except Exception:
             # Try as single cell
             try:
                 cell = ws[cell_range]
                 if hasattr(cell, 'value'):
-                    values[(cell.row, cell.column)] = normalize_value(cell.value)
+                    values[(cell.row, cell.column)] = cell.value
             except Exception:
                 pass
 
     return values
 
 
-def compare_cell_values(expected: dict, actual: dict, tolerance: float = 0.0) -> tuple:
+def compare_cell_values(expected: dict, actual: dict) -> tuple:
     """
-    Compare expected and actual cell values.
+    Compare expected and actual cell values using official comparison logic.
 
     Returns (is_match, details)
     """
@@ -122,35 +148,8 @@ def compare_cell_values(expected: dict, actual: dict, tolerance: float = 0.0) ->
         exp_val = expected.get(key)
         act_val = actual.get(key)
 
-        if exp_val is None and act_val is None:
-            continue
-
-        if exp_val is None:
-            mismatches.append(f"Cell {key}: unexpected value '{act_val}'")
-            continue
-
-        if act_val is None:
-            mismatches.append(f"Cell {key}: expected '{exp_val}', got empty")
-            continue
-
-        # Compare values
-        match = False
-
-        # Numeric comparison with tolerance
-        if isinstance(exp_val, (int, float)) and isinstance(act_val, (int, float)):
-            if tolerance > 0 and exp_val != 0:
-                relative_error = abs(exp_val - act_val) / abs(exp_val)
-                match = relative_error <= tolerance
-            else:
-                match = exp_val == act_val
-        # String comparison (case-sensitive)
-        elif isinstance(exp_val, str) and isinstance(act_val, str):
-            match = exp_val == act_val
-        else:
-            # Type mismatch - try string comparison
-            match = str(exp_val) == str(act_val)
-
-        if not match:
+        # Use official compare_cell_value function
+        if not compare_cell_value(exp_val, act_val):
             mismatches.append(f"Cell {key}: expected '{exp_val}', got '{act_val}'")
 
     is_match = len(mismatches) == 0

@@ -142,30 +142,37 @@ def generate_baseline(sample: dict, model: str = DEFAULT_MODEL) -> str:
 
 
 # =============================================================================
-# REACT: Multi-round with execution feedback (paper's key improvement)
+# REACT: Multi-round with execution feedback (aligned with official script)
+# https://github.com/RUCKBReasoning/SpreadsheetBench/blob/main/inference/inference_multiple.py
 # =============================================================================
 
-PROMPT_REACT_INIT = """You are a spreadsheet expert. Write Python code using openpyxl to solve this task.
+PROMPT_REACT_INIT = """You are a spreadsheet expert. Write Python code using openpyxl to complete the task.
 
 Task: {instruction}
-Type: {instruction_type}
-Output to: {answer_position}
+Instruction Type: {instruction_type}
+Write Answer To: {answer_position}
 
-Spreadsheet preview:
+Spreadsheet content (first rows):
 {preview}
 
-Write code that loads from `file_path`, modifies, and saves back.
+Requirements:
+- The spreadsheet is loaded from variable `file_path`
+- After modification, save to the same `file_path`
+- Your code will run on 3 test files with same structure but different data
 
+Write Python code:
 ```python
-"""
+from openpyxl import load_workbook
 
-PROMPT_REACT_FIX = """Code failed with error:
-{error}
+wb = load_workbook(file_path)
+# Your code here
+wb.save(file_path)
+```"""
 
-Fix the code:
+PROMPT_REACT_FEEDBACK = """Execution result:
+{result}
 
-```python
-"""
+{instruction}"""
 
 
 def generate_react(
@@ -175,8 +182,10 @@ def generate_react(
     test_input: str = None,
     test_output: str = None,
 ) -> tuple:
-    """Multi-round code generation with execution feedback."""
-
+    """
+    Multi-round code generation with execution feedback.
+    Aligned with official inference_multiple.py approach.
+    """
     messages = []
     turns_used = 0
 
@@ -185,7 +194,7 @@ def generate_react(
         instruction=sample["instruction"],
         instruction_type=sample["instruction_type"],
         answer_position=sample["answer_position"],
-        preview=sample.get("preview", "")[:1500],
+        preview=sample.get("preview", "")[:2000],
     )
     messages.append({"role": "user", "content": init_prompt})
 
@@ -194,27 +203,40 @@ def generate_react(
     for turn in range(max_turns):
         turns_used += 1
 
-        # Get code from model
+        # Get response from model
         response = call_claude(messages, model=model)
+        messages.append({"role": "assistant", "content": response})
+
+        # Extract code
         code = extract_code(response)
         final_code = code
 
-        messages.append({"role": "assistant", "content": response})
+        # If no test files, return after first response
+        if not test_input or not test_output:
+            break
 
-        # Try to execute if we have test files
-        if test_input and test_output:
-            result = execute_code(code, test_input, test_output)
+        # Execute code and get feedback
+        result = execute_code(code, test_input, test_output)
 
-            if result["success"]:
-                # Code ran successfully, stop
+        if result["success"]:
+            # Check if output file exists and has been modified
+            if os.path.exists(test_output):
+                # Success - code ran and produced output
                 break
             else:
-                # Code failed, ask for fix
-                fix_prompt = PROMPT_REACT_FIX.format(error=result["error"])
-                messages.append({"role": "user", "content": fix_prompt})
+                # Code ran but didn't produce output
+                feedback = PROMPT_REACT_FEEDBACK.format(
+                    result="Code executed but output file was not created.",
+                    instruction="Please fix the code to save the workbook correctly."
+                )
+                messages.append({"role": "user", "content": feedback})
         else:
-            # No execution available, just return first code
-            break
+            # Code failed with error
+            feedback = PROMPT_REACT_FEEDBACK.format(
+                result=f"Error: {result['error']}",
+                instruction="Please fix the code to resolve this error."
+            )
+            messages.append({"role": "user", "content": feedback})
 
     return final_code, turns_used
 
