@@ -105,34 +105,25 @@ output_file = r"{output_path}"
 # BASELINE: Single-round (aligned with official inference_single.py)
 # =============================================================================
 
-PROMPT_FORMAT_SINGLE = """You are a spreadsheet manipulation agent. I will provide you with six types of information:
-1. Instruction: the instruction of the spreadsheet manipulation task
-2. Spreadsheet Path: the path of the spreadsheet file to be manipulated
-3. Spreadsheet Content: the content of the spreadsheet file (first rows of each sheet)
-4. Instruction Type: the type of the instruction (Cell-Level or Sheet-Level Manipulation)
-5. Answer Position: the cell range where the answer should be written
-6. Output Path: the path of the output spreadsheet file
+PROMPT_FORMAT_SINGLE = """You are a spreadsheet manipulation agent. I will provide you with the following information:
 
 Instruction: {instruction}
-Spreadsheet Path: {spreadsheet_path}
-Spreadsheet Content:
-{spreadsheet_content}
 Instruction Type: {instruction_type}
 Answer Position: {answer_position}
-Output Path: {output_path}
 
-Please generate Python code for the final solution. Use openpyxl library.
-The code should:
-1. Load the workbook from the spreadsheet path
-2. Perform the required manipulation
-3. Save the result to the output path
+Spreadsheet Content (first rows of each sheet):
+{spreadsheet_content}
+
+Please generate Python code using openpyxl library.
+- The spreadsheet is available via the `file_path` variable
+- Save to the same `file_path` after modification
 
 ```python
 from openpyxl import load_workbook
 
-wb = load_workbook("{spreadsheet_path}")
+wb = load_workbook(file_path)
 # Your code here
-wb.save("{output_path}")
+wb.save(file_path)
 ```
 """
 
@@ -141,11 +132,9 @@ def generate_baseline(sample: dict, model: str = DEFAULT_MODEL) -> str:
     """Single-round code generation (aligned with official inference_single.py)."""
     prompt = PROMPT_FORMAT_SINGLE.format(
         instruction=sample["instruction"],
-        spreadsheet_path="file_path",  # Use variable name
         spreadsheet_content=sample.get("preview", "")[:2000],
         instruction_type=sample["instruction_type"],
         answer_position=sample["answer_position"],
-        output_path="file_path",  # Same as input for our setup
     )
     response = call_claude([{"role": "user", "content": prompt}], model=model)
     return extract_code(response)
@@ -156,37 +145,33 @@ def generate_baseline(sample: dict, model: str = DEFAULT_MODEL) -> str:
 # https://github.com/RUCKBReasoning/SpreadsheetBench/blob/main/inference/inference_multiple.py
 # =============================================================================
 
-PROMPT_DF_RCT_FORMAT = """You are a spreadsheet manipulation agent. I will provide you with six types of information:
-1. Instruction: the instruction of the spreadsheet manipulation task
-2. Spreadsheet Path: the path of the spreadsheet file to be manipulated
-3. Spreadsheet Content: the content of the spreadsheet file (first rows of each sheet)
-4. Instruction Type: the type of the instruction (Cell-Level or Sheet-Level Manipulation)
-5. Answer Position: the cell range where the answer should be written
-6. Output Path: the path of the output spreadsheet file
+PROMPT_DF_RCT_FORMAT = """You are a spreadsheet manipulation agent. I will provide you with the following information:
 
 Instruction: {instruction}
-Spreadsheet Path: {spreadsheet_path}
-Spreadsheet Content:
-{spreadsheet_content}
 Instruction Type: {instruction_type}
 Answer Position: {answer_position}
-Output Path: {output_path}
+
+Spreadsheet Content (first rows of each sheet):
+{spreadsheet_content}
 
 The solution can be generated through {max_turn_num} rounds of interaction.
-In each round, you can choose one of the following two actions:
+In each round, you can:
 1. Generate Python code to explore the spreadsheet or test your solution
 2. Generate the final Python code solution
 
 After each code execution, I will provide you with the execution result.
 If there are errors, please fix them in the next round.
 
-Please generate Python code using openpyxl library:
+Please generate Python code using openpyxl library.
+- The spreadsheet is available via the `file_path` variable
+- Save to the same `file_path` after modification
+
 ```python
 from openpyxl import load_workbook
 
-wb = load_workbook("{spreadsheet_path}")
+wb = load_workbook(file_path)
 # Your code here
-wb.save("{output_path}")
+wb.save(file_path)
 ```
 """
 
@@ -208,11 +193,9 @@ def generate_react(
     # Initial prompt (aligned with PROMPT_DF_RCT_FORMAT)
     init_prompt = PROMPT_DF_RCT_FORMAT.format(
         instruction=sample["instruction"],
-        spreadsheet_path="file_path",
         spreadsheet_content=sample.get("preview", "")[:2000],
         instruction_type=sample["instruction_type"],
         answer_position=sample["answer_position"],
-        output_path="file_path",
         max_turn_num=max_turns,
     )
     messages.append({"role": "user", "content": init_prompt})
