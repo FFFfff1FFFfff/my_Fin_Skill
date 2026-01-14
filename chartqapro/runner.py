@@ -34,7 +34,7 @@ def create_image_message(image_base64: str, text: str) -> list:
 
 
 def extract_final_answer(text: str) -> str:
-    """Extract answer from 'Final Answer: xxx' format."""
+    """Extract answer from 'Final Answer: xxx' format and clean it."""
     # Try to find "Final Answer:" pattern
     match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
     if match:
@@ -44,11 +44,32 @@ def extract_final_answer(text: str) -> str:
         lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
         answer = lines[-1] if lines else text.strip()
 
-    # Clean up
-    for prefix in ["Answer:", "The answer is", "A:", "**"]:
+    # Clean up common prefixes
+    for prefix in ["Answer:", "The answer is", "A:", "**", "answer:"]:
         if answer.lower().startswith(prefix.lower()):
             answer = answer[len(prefix):].strip()
-    return answer.rstrip('*').strip()
+
+    # Remove trailing markers
+    answer = answer.rstrip('*').rstrip('.').strip()
+
+    # Strip common unit suffixes and parenthetical notes
+    # e.g., "40 players" -> "40", "9070.001 PKR in Million" -> "9070.001"
+    answer = re.sub(r'\s*\([^)]*\)\s*$', '', answer)  # Remove trailing (...)
+    answer = re.sub(r'\s+(players?|years?|times?|points?|percentage points?|percent|%|dollars?|million|billion|PKR|USD|EUR|GBP|in Million|in Billion)\s*$', '', answer, flags=re.IGNORECASE)
+
+    # If answer starts with a description, try to extract just the value
+    # e.g., "Rest of Ontario has the highest..." -> "Rest of Ontario"
+    if ' has ' in answer.lower() or ' is ' in answer.lower() or ' shows ' in answer.lower():
+        # Try to get text before "has/is/shows"
+        for sep in [' has ', ' is ', ' shows ', ' had ', ' was ']:
+            if sep in answer.lower():
+                idx = answer.lower().find(sep)
+                potential = answer[:idx].strip()
+                if potential:
+                    answer = potential
+                    break
+
+    return answer.strip()
 
 
 # =============================================================================
@@ -111,18 +132,18 @@ def ask_with_cot(image_base64: str, questions: list, question_type: str,
     Claude Sonnet 3.5 achieved highest accuracy (55.81%) with CoT.
     """
     format_rules = {
-        "Fact Checking": "Your final answer must be exactly 'True' or 'False'.",
-        "Multi Choice": "Your final answer must be exactly one letter: A, B, C, or D.",
-        "Reasoning": "Your final answer must be a specific number or value.",
-        "Hypothetical": "Your final answer must be a concise answer.",
-        "Conversational": "Your final answer must be a concise answer.",
+        "Fact Checking": "Final answer must be EXACTLY: True or False",
+        "Multi Choice": "Final answer must be EXACTLY one letter: A, B, C, or D",
+        "Reasoning": "Final answer must be ONLY the number/value (no units, no explanation)",
+        "Hypothetical": "Final answer must be ONLY the short answer (no explanation)",
+        "Conversational": "Final answer must be ONLY the short answer (no explanation)",
     }
 
     answers = []
     conversation_history = []
 
     for question in questions:
-        rule = format_rules.get(question_type, "Your final answer must be concise.")
+        rule = format_rules.get(question_type, "Final answer must be concise, no explanation.")
         context = ""
         if question_type == "Conversational" and conversation_history:
             context = "Previous Q&A:\n" + "\n".join(f"Q: {q} → A: {a}" for q, a in conversation_history) + "\n\n"
@@ -135,11 +156,14 @@ Think step by step:
 3. Apply reasoning/calculation if needed
 4. Verify the answer makes sense
 
-{rule}
-If the chart does not contain enough information, answer "Cannot determine".
+IMPORTANT FORMAT RULES:
+- {rule}
+- Do NOT include units (like "players", "million", "%")
+- Do NOT include explanations after the answer
+- If the chart does not contain enough information, answer "Cannot determine"
 
-End your response with:
-Final Answer: [your answer]"""
+End with EXACTLY this format:
+Final Answer: [value only]"""
 
         response = client.messages.create(
             model=model, max_tokens=500, temperature=0,
