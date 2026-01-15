@@ -247,9 +247,15 @@ def evaluate_single_test_case(
     # Create a wrapper script that executes the code
     wrapper_code = f'''
 import sys
+import os
 sys.path.insert(0, '.')
+os.chdir(r"{os.path.dirname(input_path) or '.'}")
 
 # Set file paths as variables the code might expect
+# Official prompt uses spreadsheet_path and output_path
+spreadsheet_path = r"{input_path}"
+output_path = r"{output_path}"
+# Legacy variable names for backwards compatibility
 input_file = r"{input_path}"
 output_file = r"{output_path}"
 file_path = r"{output_path}"

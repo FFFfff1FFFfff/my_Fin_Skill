@@ -5,7 +5,6 @@ Aligned with official SpreadsheetBench inference scripts.
 
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 
@@ -31,17 +30,17 @@ def execute_code(code: str, input_file: str, output_file: str, timeout: int = 30
     The code should use spreadsheet_path (input) and output_path (output) variables,
     matching the official prompt format.
     """
-    # Replace path variables in code to use actual paths
-    modified_code = code.replace("spreadsheet_path", f'r"{input_file}"')
-    modified_code = modified_code.replace("output_path", f'r"{output_file}"')
-
     wrapper = f'''
 import sys
 import os
 sys.path.insert(0, '.')
 os.chdir(r"{os.path.dirname(input_file) or '.'}")
 
-{modified_code}
+# Set file paths as variables the code expects
+spreadsheet_path = r"{input_file}"
+output_path = r"{output_file}"
+
+{code}
 '''
     wrapper_path = None
     try:
