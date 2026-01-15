@@ -1,296 +1,140 @@
 #!/usr/bin/env python3
 """
-Runner for SpreadsheetBench benchmark.
+SpreadsheetBench Runner - PoT (Program of Thought) Style
 
-Simplified implementation based on paper insights:
-1. Baseline: Single-round code generation
-2. ReAct: Multi-round with execution feedback (paper's key improvement)
+Aligned with official inference scripts:
+https://github.com/RUCKBReasoning/SpreadsheetBench/tree/main/inference
+
+Settings:
+- row_react_exec: Data preview + Multi-round (default, best performance)
+- pure_react_exec: No preview + Multi-round (model explores on its own)
+- react_exec: Data preview + Single-round (baseline)
 
 Usage:
-    python runner.py --limit 20 --mode baseline
-    python runner.py --limit 20 --mode react --max-turns 5
+    python runner.py --limit 20 --setting row_react_exec --max-turns 5
+    python runner.py --limit 20 --setting react_exec
 """
 
 import argparse
 import json
 import os
-import re
-import shutil
-import subprocess
+import sys
 import tempfile
 from datetime import datetime
 
 import anthropic
 
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from data_loader import load_spreadsheetbench, load_sample_data
 from evaluator import evaluate_instruction, calculate_metrics
+from skills.spreadsheet_pot.pot_tools import (
+    extract_code,
+    execute_code,
+    format_exec_result,
+    check_output_exists,
+    build_prompt,
+)
 
 
 client = anthropic.Anthropic()
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
-def extract_code(response: str) -> str:
-    """Extract Python code from model response."""
-    patterns = [
-        r"```python\n(.*?)```",
-        r"```py\n(.*?)```",
-        r"```\n(.*?)```",
-    ]
-    for pattern in patterns:
-        matches = re.findall(pattern, response, re.DOTALL)
-        if matches:
-            return max(matches, key=len).strip()
-    return response.strip()
-
-
-def call_claude(messages: list, model: str = DEFAULT_MODEL, max_tokens: int = 4096) -> str:
+def call_llm(messages: list, model: str = DEFAULT_MODEL) -> str:
     """Call Claude API."""
     response = client.messages.create(
         model=model,
-        max_tokens=max_tokens,
+        max_tokens=4096,
         messages=messages,
     )
     return response.content[0].text
 
 
-def execute_code(code: str, input_path: str, output_path: str, timeout: int = 30, copy_first: bool = True) -> dict:
-    """Execute Python code and return result.
-
-    Args:
-        copy_first: If True, copy input to output before execution (for evaluation).
-                   If False, code must save to output_file itself (for React).
-    """
-    if copy_first:
-        try:
-            shutil.copy(input_path, output_path)
-        except Exception as e:
-            return {"success": False, "error": f"Copy failed: {e}"}
-        # Code uses file_path (same as output)
-        wrapper = f'''
-import sys
-sys.path.insert(0, '.')
-file_path = r"{output_path}"
-input_file = r"{input_path}"
-output_file = r"{output_path}"
-
-{code}
-'''
-    else:
-        # Code must load from input_file and save to output_file
-        wrapper = f'''
-import sys
-sys.path.insert(0, '.')
-file_path = r"{input_path}"
-input_file = r"{input_path}"
-output_file = r"{output_path}"
-
-{code}
-'''
-    try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(wrapper)
-            wrapper_path = f.name
-
-        proc = subprocess.run(
-            ['python', wrapper_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=os.path.dirname(input_path) or '.',
-        )
-
-        if proc.returncode != 0:
-            error_lines = proc.stderr.strip().split('\n')
-            return {"success": False, "error": '\n'.join(error_lines[-10:])}
-
-        return {"success": True, "output": proc.stdout}
-
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": f"Timeout after {timeout}s"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        if 'wrapper_path' in locals():
-            try:
-                os.remove(wrapper_path)
-            except:
-                pass
-
-
-# =============================================================================
-# BASELINE: Single-round (aligned with official inference_single.py)
-# =============================================================================
-
-PROMPT_FORMAT_SINGLE = """You are a spreadsheet manipulation agent. I will provide you with the following information:
-
-Instruction: {instruction}
-Instruction Type: {instruction_type}
-Answer Position: {answer_position}
-
-Spreadsheet Content (first rows of each sheet):
-{spreadsheet_content}
-
-Please generate Python code using openpyxl library.
-- The spreadsheet is available via the `file_path` variable
-- Save to the same `file_path` after modification
-
-```python
-from openpyxl import load_workbook
-
-wb = load_workbook(file_path)
-# Your code here
-wb.save(file_path)
-```
-"""
-
-
-def generate_baseline(sample: dict, model: str = DEFAULT_MODEL) -> str:
-    """Single-round code generation (aligned with official inference_single.py)."""
-    prompt = PROMPT_FORMAT_SINGLE.format(
-        instruction=sample["instruction"],
-        spreadsheet_content=sample.get("preview", "")[:2000],
-        instruction_type=sample["instruction_type"],
-        answer_position=sample["answer_position"],
-    )
-    response = call_claude([{"role": "user", "content": prompt}], model=model)
-    return extract_code(response)
-
-
-# =============================================================================
-# REACT: Multi-round with execution feedback (aligned with official script)
-# https://github.com/RUCKBReasoning/SpreadsheetBench/blob/main/inference/inference_multiple.py
-# =============================================================================
-
-PROMPT_DF_RCT_FORMAT = """You are a spreadsheet manipulation agent. I will provide you with the following information:
-
-Instruction: {instruction}
-Instruction Type: {instruction_type}
-Answer Position: {answer_position}
-
-Spreadsheet Content (first rows of each sheet):
-{spreadsheet_content}
-
-The solution can be generated through {max_turn_num} rounds of interaction.
-In each round, you can:
-1. Generate Python code to explore the spreadsheet or test your solution
-2. Generate the final Python code solution
-
-After each code execution, I will provide you with the execution result.
-If there are errors, please fix them in the next round.
-
-Please generate Python code using openpyxl library.
-- Load the spreadsheet from `input_file` variable
-- Save the result to `output_file` variable
-
-```python
-from openpyxl import load_workbook
-
-wb = load_workbook(input_file)
-# Your code here
-wb.save(output_file)
-```
-"""
-
-
-def generate_react(
+def run_pot(
     sample: dict,
-    model: str = DEFAULT_MODEL,
+    setting: str = "row_react_exec",
     max_turns: int = 5,
+    model: str = DEFAULT_MODEL,
     test_input: str = None,
     test_output: str = None,
 ) -> tuple:
     """
-    Multi-round code generation with execution feedback.
-    Aligned with official inference_multiple.py (row_react_exec setting).
+    Run PoT (Program of Thought) inference.
+
+    Args:
+        sample: Sample data dict
+        setting: "row_react_exec", "pure_react_exec", or "react_exec"
+        max_turns: Maximum interaction rounds
+        model: Model to use
+        test_input: Input file path for execution
+        test_output: Output file path for execution
+
+    Returns:
+        Tuple of (final_code, turns_used)
     """
-    messages = []
-    turns_used = 0
+    # Build initial prompt
+    prompt = build_prompt(sample, setting=setting, max_turn_num=max_turns)
+    messages = [{"role": "user", "content": prompt}]
 
-    # Initial prompt (aligned with PROMPT_DF_RCT_FORMAT)
-    init_prompt = PROMPT_DF_RCT_FORMAT.format(
-        instruction=sample["instruction"],
-        spreadsheet_content=sample.get("preview", "")[:2000],
-        instruction_type=sample["instruction_type"],
-        answer_position=sample["answer_position"],
-        max_turn_num=max_turns,
-    )
-    messages.append({"role": "user", "content": init_prompt})
+    # Single-round mode (react_exec)
+    if setting == "react_exec":
+        response = call_llm(messages, model=model)
+        return extract_code(response), 1
 
+    # Multi-round mode (row_react_exec, pure_react_exec)
     final_code = None
-
     for turn in range(max_turns):
-        turns_used += 1
-
-        # Get response from model
-        response = call_claude(messages, model=model)
+        # Get LLM response
+        response = call_llm(messages, model=model)
         messages.append({"role": "assistant", "content": response})
 
         # Extract code
         code = extract_code(response)
         final_code = code
 
-        # If no test files, return after first response
+        # No test files - return after first response
         if not test_input or not test_output:
-            break
+            return final_code, turn + 1
 
-        # Remove old output before execution (so we can check if code creates it)
+        # Remove old output before execution
         if os.path.exists(test_output):
             os.remove(test_output)
 
-        # Execute code with copy_first=False (code must save to output_file)
-        result = execute_code(code, test_input, test_output, copy_first=False)
+        # Execute code
+        result = execute_code(code, test_input, test_output)
 
-        # Get execution result (matching official script pattern)
-        try:
-            if result["success"]:
-                exec_result = result.get("output", "")
-                if not exec_result.strip():
-                    exec_result = "Code executed successfully."
-            else:
-                exec_result = f"Error occur when running code.\n{result['error']}"
-        except Exception:
-            exec_result = "Error occur when running code."
+        # Format feedback
+        feedback = format_exec_result(result, test_output)
+        messages.append({"role": "user", "content": feedback})
 
-        # Append execution result to messages (official always appends)
-        messages.append({"role": "user", "content": exec_result})
+        # Check termination: output file created and execution succeeded
+        if check_output_exists(test_output) and result["success"]:
+            return final_code, turn + 1
 
-        # Check if output file exists AND code succeeded - then we're done
-        if os.path.exists(test_output) and result["success"]:
-            break
+    return final_code, max_turns
 
-    return final_code, turns_used
-
-
-# =============================================================================
-# Main Runner
-# =============================================================================
 
 def run_benchmark(
     limit: int = None,
     model: str = DEFAULT_MODEL,
-    mode: str = "baseline",
+    setting: str = "row_react_exec",
     max_turns: int = 5,
     use_sample: bool = False,
     data_dir: str = None,
     output_dir: str = None,
     instruction_types: list = None,
 ):
-    """Run benchmark."""
+    """Run SpreadsheetBench benchmark."""
 
     print("=" * 60)
-    print("SpreadsheetBench Benchmark")
+    print("SpreadsheetBench - PoT Runner")
     print("=" * 60)
     print(f"Model: {model}")
-    print(f"Mode: {mode}")
-    if mode in ["react", "all"]:
+    print(f"Setting: {setting}")
+    if setting != "react_exec":
         print(f"Max turns: {max_turns}")
-
-    # Determine which modes to run
-    if mode == "all":
-        modes_to_run = ["baseline", "react"]
-    else:
-        modes_to_run = [mode]
 
     # Load data
     if use_sample:
@@ -313,9 +157,8 @@ def run_benchmark(
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output: {output_dir}")
 
-    # Results storage per mode
-    all_results = {m: [] for m in modes_to_run}
-    total_turns = {m: 0 for m in modes_to_run}
+    results = []
+    total_turns = 0
 
     for i, sample in enumerate(samples):
         print(f"\n[{i+1}/{len(samples)}] ID: {sample['id']}")
@@ -333,110 +176,92 @@ def run_benchmark(
             test_input = tc['input_file']
             test_output = os.path.join(sample_dir, "test_output.xlsx")
 
-        for run_mode in modes_to_run:
-            try:
-                if run_mode == "baseline":
-                    code = generate_baseline(sample, model=model)
-                    turns = 1
-                else:  # react
-                    code, turns = generate_react(
-                        sample, model=model, max_turns=max_turns,
-                        test_input=test_input, test_output=test_output,
-                    )
+        try:
+            code, turns = run_pot(
+                sample,
+                setting=setting,
+                max_turns=max_turns,
+                model=model,
+                test_input=test_input,
+                test_output=test_output,
+            )
+            total_turns += turns
 
-                total_turns[run_mode] += turns
+            # Save code
+            with open(os.path.join(sample_dir, "code.py"), "w") as f:
+                f.write(code)
 
-                # Save code
-                with open(os.path.join(sample_dir, f"{run_mode}_code.py"), "w") as f:
-                    f.write(code)
+            # Evaluate
+            if sample['test_cases']:
+                eval_result = evaluate_instruction(
+                    code=code,
+                    test_cases=sample['test_cases'],
+                    answer_position=sample['answer_position'],
+                    output_dir=sample_dir,
+                )
+                eval_result["id"] = sample["id"]
+                eval_result["instruction_type"] = sample["instruction_type"]
+                eval_result["turns"] = turns
+                results.append(eval_result)
 
-                # Evaluate
-                if sample['test_cases']:
-                    eval_result = evaluate_instruction(
-                        code=code,
-                        test_cases=sample['test_cases'],
-                        answer_position=sample['answer_position'],
-                        output_dir=sample_dir,
-                    )
-                    eval_result["id"] = sample["id"]
-                    eval_result["instruction_type"] = sample["instruction_type"]
-                    eval_result["turns"] = turns
-                    eval_result["code_length"] = len(code)
-                    all_results[run_mode].append(eval_result)
+                status = "PASS" if eval_result["hard_restriction"] == 1 else "FAIL"
+                print(f"  [{status}] Soft: {eval_result['soft_restriction']:.0%}, Turns: {turns}")
+            else:
+                print(f"  (No test cases) Turns: {turns}")
 
-                    status = "✓" if eval_result["hard_restriction"] == 1 else "✗"
-                    print(f"  [{run_mode}] {status} Soft: {eval_result['soft_restriction']:.0%}, Hard: {eval_result['hard_restriction']}, Turns: {turns}")
-                else:
-                    print(f"  [{run_mode}] (No test cases)")
-
-            except Exception as e:
-                print(f"  [{run_mode}] ERROR: {e}")
-                if sample['test_cases']:
-                    all_results[run_mode].append({
-                        "id": sample["id"],
-                        "instruction_type": sample["instruction_type"],
-                        "soft_restriction": 0.0,
-                        "hard_restriction": 0,
-                        "error": str(e),
-                    })
+        except Exception as e:
+            print(f"  [ERROR] {e}")
+            if sample['test_cases']:
+                results.append({
+                    "id": sample["id"],
+                    "instruction_type": sample["instruction_type"],
+                    "soft_restriction": 0.0,
+                    "hard_restriction": 0,
+                    "error": str(e),
+                })
 
     # Summary
     print("\n" + "=" * 60)
     print("RESULTS")
     print("=" * 60)
 
-    metrics_by_mode = {}
-    for run_mode in modes_to_run:
-        results = all_results[run_mode]
-        if results:
-            metrics = calculate_metrics(results)
-            metrics_by_mode[run_mode] = metrics
-            print(f"\n[{run_mode.upper()}]")
-            print(f"  Soft Restriction: {metrics['soft_restriction_avg']:.1%}")
-            print(f"  Hard Restriction: {metrics['hard_restriction_avg']:.1%}")
-            print(f"  Avg Turns: {total_turns[run_mode] / len(samples):.1f}")
+    if results:
+        metrics = calculate_metrics(results)
+        print(f"Soft Restriction: {metrics['soft_restriction_avg']:.1%}")
+        print(f"Hard Restriction: {metrics['hard_restriction_avg']:.1%}")
+        print(f"Avg Turns: {total_turns / len(samples):.1f}")
 
-            if metrics['by_type']:
-                for t, d in metrics['by_type'].items():
-                    print(f"    {t}: Soft={d['soft_restriction_avg']:.1%}, Hard={d['hard_restriction_avg']:.1%}")
+        if metrics['by_type']:
+            for t, d in metrics['by_type'].items():
+                print(f"  {t}: Soft={d['soft_restriction_avg']:.1%}, Hard={d['hard_restriction_avg']:.1%}")
 
-    # Comparison if running both
-    if len(modes_to_run) > 1 and "baseline" in metrics_by_mode and "react" in metrics_by_mode:
-        print("\n" + "-" * 40)
-        print("COMPARISON (react vs baseline)")
-        print("-" * 40)
-        base = metrics_by_mode["baseline"]
-        react = metrics_by_mode["react"]
-        soft_diff = react['soft_restriction_avg'] - base['soft_restriction_avg']
-        hard_diff = react['hard_restriction_avg'] - base['hard_restriction_avg']
-        print(f"  Soft: {soft_diff:+.1%}")
-        print(f"  Hard: {hard_diff:+.1%}")
-
-    # Save
-    with open(os.path.join(output_dir, "results.json"), "w") as f:
-        json.dump({
-            "model": model,
-            "mode": mode,
-            "max_turns": max_turns,
-            "timestamp": datetime.now().isoformat(),
-            "results": all_results,
-            "metrics": metrics_by_mode,
-        }, f, indent=2, default=str)
+        # Save results
+        with open(os.path.join(output_dir, "results.json"), "w") as f:
+            json.dump({
+                "model": model,
+                "setting": setting,
+                "max_turns": max_turns,
+                "timestamp": datetime.now().isoformat(),
+                "metrics": metrics,
+                "results": results,
+            }, f, indent=2, default=str)
 
     print(f"\nSaved to: {output_dir}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
-    parser.add_argument("--mode", type=str, default="baseline", choices=["baseline", "react", "all"])
-    parser.add_argument("--max-turns", type=int, default=5)
-    parser.add_argument("--sample", action="store_true")
-    parser.add_argument("--data-dir", type=str, default=None)
-    parser.add_argument("--output-dir", type=str, default=None)
-    parser.add_argument("--cell-level", action="store_true")
-    parser.add_argument("--sheet-level", action="store_true")
+    parser = argparse.ArgumentParser(description="SpreadsheetBench PoT Runner")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of samples")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Model to use")
+    parser.add_argument("--setting", type=str, default="row_react_exec",
+                        choices=["row_react_exec", "pure_react_exec", "react_exec"],
+                        help="Inference setting")
+    parser.add_argument("--max-turns", type=int, default=5, help="Max interaction rounds")
+    parser.add_argument("--sample", action="store_true", help="Use sample data")
+    parser.add_argument("--data-dir", type=str, default=None, help="Data directory")
+    parser.add_argument("--output-dir", type=str, default=None, help="Output directory")
+    parser.add_argument("--cell-level", action="store_true", help="Only Cell-Level tasks")
+    parser.add_argument("--sheet-level", action="store_true", help="Only Sheet-Level tasks")
 
     args = parser.parse_args()
 
@@ -449,7 +274,7 @@ if __name__ == "__main__":
     run_benchmark(
         limit=args.limit,
         model=args.model,
-        mode=args.mode,
+        setting=args.setting,
         max_turns=args.max_turns,
         use_sample=args.sample,
         data_dir=args.data_dir,
