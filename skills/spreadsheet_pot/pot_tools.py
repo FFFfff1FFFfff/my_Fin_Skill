@@ -1,24 +1,17 @@
 """
 PoT (Program of Thought) tools for spreadsheet manipulation.
-Provides code execution and extraction utilities.
+Aligned with official SpreadsheetBench inference scripts.
 """
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 
 
 def extract_code(response: str) -> str:
-    """
-    Extract Python code from LLM response.
-
-    Args:
-        response: The full LLM response text
-
-    Returns:
-        Extracted Python code, or original response if no code block found
-    """
+    """Extract Python code from LLM response."""
     patterns = [
         r"```python\n(.*?)```",
         r"```py\n(.*?)```",
@@ -35,23 +28,20 @@ def execute_code(code: str, input_file: str, output_file: str, timeout: int = 30
     """
     Execute Python code for spreadsheet manipulation.
 
-    Args:
-        code: Python code to execute
-        input_file: Path to input spreadsheet
-        output_file: Path to save output spreadsheet
-        timeout: Execution timeout in seconds
-
-    Returns:
-        Dict with keys: success (bool), output (str), error (str)
+    The code should use spreadsheet_path (input) and output_path (output) variables,
+    matching the official prompt format.
     """
+    # Replace path variables in code to use actual paths
+    modified_code = code.replace("spreadsheet_path", f'r"{input_file}"')
+    modified_code = modified_code.replace("output_path", f'r"{output_file}"')
+
     wrapper = f'''
 import sys
+import os
 sys.path.insert(0, '.')
-input_file = r"{input_file}"
-output_file = r"{output_file}"
-file_path = input_file
+os.chdir(r"{os.path.dirname(input_file) or '.'}")
 
-{code}
+{modified_code}
 '''
     wrapper_path = None
     try:
@@ -64,12 +54,11 @@ file_path = input_file
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=os.path.dirname(input_file) or '.',
         )
 
         if proc.returncode != 0:
             error_lines = proc.stderr.strip().split('\n')[-10:]
-            return {"success": False, "output": "", "error": '\n'.join(error_lines)}
+            return {"success": False, "output": proc.stdout, "error": '\n'.join(error_lines)}
 
         return {"success": True, "output": proc.stdout, "error": ""}
 
@@ -83,16 +72,7 @@ file_path = input_file
 
 
 def format_exec_result(result: dict, output_file: str) -> str:
-    """
-    Format execution result as feedback message for LLM.
-
-    Args:
-        result: Dict from execute_code()
-        output_file: Path to check for output file existence
-
-    Returns:
-        Formatted string to send back to LLM
-    """
+    """Format execution result as feedback message for LLM."""
     if result["success"]:
         output = result["output"].strip()
         if output:
@@ -101,98 +81,115 @@ def format_exec_result(result: dict, output_file: str) -> str:
             return "Code executed successfully. Output file created."
         return "Code executed successfully."
     else:
-        return f"Error occurred when running code.\n{result['error']}"
+        return f"Error occur when running code.\n{result['error']}"
 
 
 def check_output_exists(output_file: str) -> bool:
-    """
-    Check if output file was created.
-
-    Args:
-        output_file: Path to output file
-
-    Returns:
-        True if file exists
-    """
+    """Check if output file was created."""
     return os.path.exists(output_file)
 
 
-# Prompt templates as constants
-PROMPT_DF_RCT_FORMAT = """You are a spreadsheet manipulation agent. I will provide you with the following information:
+# Official prompt templates from SpreadsheetBench
+# https://github.com/RUCKBReasoning/SpreadsheetBench/blob/main/inference/prompt_format.py
 
-Instruction: {instruction}
-Spreadsheet file path: {spreadsheet_path}
+PROMPT_FORMAT_SINGLE = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
 
-The spreadsheet has the following content (first rows of each sheet):
-{content}
+You need to solve the given spreadsheet manipulation question, which contains six types of information:
+- instruction: The question about spreadsheet manipulation.
+- spreadsheet_path: The path of the spreadsheet file you need to manipulate.
+- spreadsheet_content: The first few rows of the content of speadsheet file.
+- instruction_type: There are two values (Cell-Level Manipulation, Sheet-Level Manipulation) used to indicate whether the answer to this question applies only to specific cells or to the entire worksheet.
+- answer_position: The position need to be modified or filled. For Cell-Level Manipulation questions, this field is filled with the cell position; for Sheet-Level Manipulation, it is the maximum range of cells you need to modify. You only need to modify or fill in values within the cell range specified by answer_position.
+- output_path: You need to generate the modified spreadsheet file in this new path.
 
-Instruction type: {type}
-Answer position: {answer_position}
+Below is the spreadsheet manipulation question you need to solve:
+### instruction
+{instruction}
 
-The solution can be generated through {max_turn_num} rounds of interaction. You can take one of the two actions:
-1. Spreadsheet information acquisition: If the information I provide is not enough to solve the problem, you can write python code to load the spreadsheet and access more information.
-2. Question solution: Provide the final python code. If the code you write has an error, I will provide the error message, and you can fix the code.
+### spreadsheet_path
+{spreadsheet_path}
 
-Please generate Python code using openpyxl library.
-- Load from: input_file (variable provided)
-- Save to: output_file (variable provided)
+### spreadsheet_content
+{spreadsheet_content}
 
-```python
-from openpyxl import load_workbook
+### instruction_type
+{instruction_type}
 
-wb = load_workbook(input_file)
-# Your code here
-wb.save(output_file)
-```"""
+### answer_position
+{answer_position}
 
-PROMPT_NO_DF_RCT_FORMAT = """You are a spreadsheet manipulation agent. I will provide you with the following information:
+### output_path
+{output_path}
 
-Instruction: {instruction}
-Spreadsheet file path: {spreadsheet_path}
-Instruction type: {type}
-Answer position: {answer_position}
+You should generate Python code for the final solution of the question.
+"""
 
-The solution can be generated through {max_turn_num} rounds of interaction. You can take one of the two actions:
-1. Spreadsheet information acquisition: Write python code to load the spreadsheet and explore its structure and content.
-2. Question solution: Provide the final python code. If the code you write has an error, I will provide the error message, and you can fix the code.
+PROMPT_NO_DF_RCT_FORMAT = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
 
-Please generate Python code using openpyxl library.
-- Load from: input_file (variable provided)
-- Save to: output_file (variable provided)
+You need to solve the given spreadsheet manipulation question, which contains five types of information:
+- instruction: The question about spreadsheet manipulation.
+- spreadsheet_path: The path of the spreadsheet file you need to manipulate.
+- instruction_type: There are two values (Cell-Level Manipulation, Sheet-Level Manipulation) used to indicate whether the answer to this question applies only to specific cells or to the entire worksheet.
+- answer_position: The position need to be modified or filled. For Cell-Level Manipulation questions, this field is filled with the cell position; for Sheet-Level Manipulation, it is the maximum range of cells you need to modify. You only need to modify or fill in values within the cell range specified by answer_position.
+- output_path: You need to generate the modified spreadsheet file in this new path.
 
-```python
-from openpyxl import load_workbook
+Below is the spreadsheet manipulation question you need to solve:
+### instruction
+{instruction}
 
-wb = load_workbook(input_file)
-# Your code here
-wb.save(output_file)
-```"""
+### spreadsheet_path
+{spreadsheet_path}
 
-PROMPT_FORMAT_SINGLE = """You are a spreadsheet manipulation agent. I will provide you with the following information:
+### instruction_type
+{instruction_type}
 
-Instruction: {instruction}
-Spreadsheet file path: {spreadsheet_path}
+### answer_position
+{answer_position}
 
-The spreadsheet has the following content (first rows of each sheet):
-{content}
+### output_path
+{output_path}
 
-Instruction type: {type}
-Answer position: {answer_position}
+The solution of the question can be generate through {max_turn_num} rounds of interaction and you can do two types of actions.
+1. Spreadsheet information acquisition: You can generate Python code to obtain the information in the spreadsheet file. In the next turn, the execution result of you Python code will provide to you.
+2. Question solution generation: You can generate Python code for the final solution of the question. If error occur when executing code, the error traceback will provide to you for code refinement.
+"""
 
-Please generate Python code using openpyxl library.
-- The spreadsheet is available via the `file_path` variable
-- Save to the same `file_path` after modification
+PROMPT_DF_RCT_FORMAT = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
 
-```python
-from openpyxl import load_workbook
+You need to solve the given spreadsheet manipulation question, which contains six types of information:
+- instruction: The question about spreadsheet manipulation.
+- spreadsheet_path: The path of the spreadsheet file you need to manipulate.
+- spreadsheet_content: The first few rows of the content of speadsheet file.
+- instruction_type: There are two values (Cell-Level Manipulation, Sheet-Level Manipulation) used to indicate whether the answer to this question applies only to specific cells or to the entire worksheet.
+- answer_position: The position need to be modified or filled. For Cell-Level Manipulation questions, this field is filled with the cell position; for Sheet-Level Manipulation, it is the maximum range of cells you need to modify. You only need to modify or fill in values within the cell range specified by answer_position.
+- output_path: You need to generate the modified spreadsheet file in this new path.
 
-wb = load_workbook(file_path)
-# Your code here
-wb.save(file_path)
-```"""
+Below is the spreadsheet manipulation question you need to solve:
+### instruction
+{instruction}
+
+### spreadsheet_path
+{spreadsheet_path}
+
+### spreadsheet_content
+{spreadsheet_content}
+
+### instruction_type
+{instruction_type}
+
+### answer_position
+{answer_position}
+
+### output_path
+{output_path}
+
+The solution of the question can be generate through {max_turn_num} rounds of interaction and you can do two types of actions.
+1. Spreadsheet information acquisition: You can generate Python code to obtain the information in the spreadsheet file. In the next turn, the execution result of you Python code will provide to you.
+2. Question solution generation: You can generate Python code for the final solution of the question. If error occur when executing code, the error traceback will provide to you for code refinement.
+"""
 
 
-def build_prompt(sample: dict, setting: str = "row_react_exec", max_turn_num: int = 5) -> str:
+def build_prompt(sample: dict, setting: str, max_turn_num: int, output_path: str) -> str:
     """
     Build prompt from sample data.
 
@@ -200,21 +197,18 @@ def build_prompt(sample: dict, setting: str = "row_react_exec", max_turn_num: in
         sample: Dict with instruction, preview, instruction_type, answer_position, etc.
         setting: One of "row_react_exec", "pure_react_exec", "react_exec"
         max_turn_num: Maximum interaction rounds
-
-    Returns:
-        Formatted prompt string
+        output_path: Path where output file should be saved
     """
-    # Get spreadsheet path from first test case if available
-    spreadsheet_path = "spreadsheet.xlsx"
-    if sample.get("test_cases"):
-        spreadsheet_path = sample["test_cases"][0].get("input_file", spreadsheet_path)
+    # Get spreadsheet path from first test case
+    spreadsheet_path = sample["test_cases"][0]["input_file"] if sample.get("test_cases") else "spreadsheet.xlsx"
 
     params = {
         "instruction": sample["instruction"],
         "spreadsheet_path": spreadsheet_path,
-        "content": sample.get("preview", "")[:3000],
-        "type": sample["instruction_type"],
+        "spreadsheet_content": sample.get("preview", "")[:5000],
+        "instruction_type": sample["instruction_type"],
         "answer_position": sample["answer_position"],
+        "output_path": output_path,
         "max_turn_num": max_turn_num,
     }
 
@@ -222,5 +216,5 @@ def build_prompt(sample: dict, setting: str = "row_react_exec", max_turn_num: in
         return PROMPT_DF_RCT_FORMAT.format(**params)
     elif setting == "pure_react_exec":
         return PROMPT_NO_DF_RCT_FORMAT.format(**params)
-    else:  # react_exec (single round)
+    else:  # react_exec (single round baseline)
         return PROMPT_FORMAT_SINGLE.format(**params)

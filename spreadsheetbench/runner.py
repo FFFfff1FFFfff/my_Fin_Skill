@@ -76,8 +76,8 @@ def run_pot(
     Returns:
         Tuple of (final_code, turns_used)
     """
-    # Build initial prompt
-    prompt = build_prompt(sample, setting=setting, max_turn_num=max_turns)
+    # Build initial prompt with output_path
+    prompt = build_prompt(sample, setting=setting, max_turn_num=max_turns, output_path=test_output or "output.xlsx")
     messages = [{"role": "user", "content": prompt}]
 
     # Single-round mode (react_exec)
@@ -111,8 +111,8 @@ def run_pot(
         feedback = format_exec_result(result, test_output)
         messages.append({"role": "user", "content": feedback})
 
-        # Check termination: output file created and execution succeeded
-        if check_output_exists(test_output) and result["success"]:
+        # Check termination: output file created
+        if check_output_exists(test_output):
             return final_code, turn + 1
 
     return final_code, max_turns
