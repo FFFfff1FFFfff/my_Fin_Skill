@@ -7,139 +7,91 @@ Multi-round code generation with execution feedback for Excel/spreadsheet manipu
 
 ---
 
-## Prompt Templates
+## Optimized Multi-Round Strategy
 
-### PROMPT_DF_RCT_FORMAT (Data + React)
+### Key Improvements (vs basic React)
 
-Primary template for multi-round interaction with data preview.
+| Problem | Solution |
+|---------|----------|
+| Wrong output type (改文件 vs 写公式) | **Task routing**: First determine if task needs formula/VBA/data modification |
+| State not preserved between rounds | Remind model to reload workbook each round |
+| Guess structure then fix | **Structure probe first**: Always explore sheets/tables/columns in Round 1 |
+| No verification | **Self-check**: Verify target cell before saving |
 
-```
-You are a spreadsheet manipulation agent. I will provide you with the following information:
-
-Instruction: {instruction}
-Spreadsheet file path: {spreadsheet_path}
-
-The spreadsheet has the following content (first rows of each sheet):
-{content}
-
-Instruction type: {type}
-Answer position: {answer_position}
-
-The solution can be generated through {max_turn_num} rounds of interaction. You can take one of the two actions:
-1. Spreadsheet information acquisition: If the information I provide is not enough to solve the problem, you can write python code to load the spreadsheet and access more information.
-2. Question solution: Provide the final python code. If the code you write has an error, I will provide the error message, and you can fix the code.
-
-Please generate Python code using openpyxl library.
-- Load from: input_file (variable provided)
-- Save to: output_file (variable provided)
-
-```python
-from openpyxl import load_workbook
-
-wb = load_workbook(input_file)
-# Your code here
-wb.save(output_file)
-```
-```
-
-### PROMPT_NO_DF_RCT_FORMAT (Pure React)
-
-Template for multi-round without data preview (model explores on its own).
+### Multi-Round Flow
 
 ```
-You are a spreadsheet manipulation agent. I will provide you with the following information:
+Round 1: Structure Exploration
+├── List all sheets
+├── List tables/named ranges
+├── Print first few rows
+└── Identify column types
 
-Instruction: {instruction}
-Spreadsheet file path: {spreadsheet_path}
-Instruction type: {type}
-Answer position: {answer_position}
+Round 2+: Solution Implementation
+├── Based on discovered structure
+├── No guessing
+└── Handle errors if any
 
-The solution can be generated through {max_turn_num} rounds of interaction. You can take one of the two actions:
-1. Spreadsheet information acquisition: Write python code to load the spreadsheet and explore its structure and content.
-2. Question solution: Provide the final python code. If the code you write has an error, I will provide the error message, and you can fix the code.
-
-Please generate Python code using openpyxl library.
-- Load from: input_file (variable provided)
-- Save to: output_file (variable provided)
-
-```python
-from openpyxl import load_workbook
-
-wb = load_workbook(input_file)
-# Your code here
-wb.save(output_file)
-```
-```
-
-### PROMPT_FORMAT_SINGLE (Baseline)
-
-Single-round template without interaction.
-
-```
-You are a spreadsheet manipulation agent. I will provide you with the following information:
-
-Instruction: {instruction}
-Spreadsheet file path: {spreadsheet_path}
-
-The spreadsheet has the following content (first rows of each sheet):
-{content}
-
-Instruction type: {type}
-Answer position: {answer_position}
-
-Please generate Python code using openpyxl library.
-- The spreadsheet is available via the `file_path` variable
-- Save to the same `file_path` after modification
-
-```python
-from openpyxl import load_workbook
-
-wb = load_workbook(file_path)
-# Your code here
-wb.save(file_path)
-```
-```
-
----
-
-## PoT Execution Flow
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Round 1: Initial Prompt                                    │
-│  - Provide instruction, data preview, constraints           │
-│  - Model generates Python code                              │
-└──────────────────────────┬──────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Execute Code                                               │
-│  - Run generated code with input_file/output_file           │
-│  - Capture stdout, stderr, exceptions                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           ↓
-              ┌────────────┴────────────┐
-              │  Output file created?   │
-              └────────────┬────────────┘
-                    Yes    │    No
-              ┌────────────┴────────────┐
-              ↓                         ↓
-        ┌─────────┐            ┌────────────────────┐
-        │  Done   │            │  Round 2..N:       │
-        └─────────┘            │  - Send exec result│
-                               │  - Model fixes code│
-                               │  - Execute again   │
-                               └────────────────────┘
+Final: Self-Check
+├── Verify answer_position has expected value
+└── Save to output_path
 ```
 
 ---
 
 ## Settings
 
-| Setting | Data Preview | Multi-round | Use Case |
-|---------|-------------|-------------|----------|
-| `row_react_exec` | Yes | Yes | Default, best performance |
-| `pure_react_exec` | No | Yes | Test model exploration |
-| `react_exec` | Yes | No | Baseline comparison |
+| Setting | Data Preview | Multi-round | Description |
+|---------|-------------|-------------|-------------|
+| `row_react_exec` | ✅ | ✅ | Default, with optimized prompt |
+| `pure_react_exec` | ❌ | ✅ | Model explores on its own |
+| `react_exec` | ✅ | ❌ | Single-round baseline |
+| `compare` | - | - | Run baseline + multi-round |
+
+---
+
+## Usage
+
+```bash
+# Single JSON output, no intermediate files
+python spreadsheetbench/runner.py --limit 20 --setting compare -o results.json
+
+# Multi-round only
+python spreadsheetbench/runner.py --limit 50 --setting row_react_exec --max-turns 5
+
+# Baseline only
+python spreadsheetbench/runner.py --limit 50 --setting react_exec
+```
+
+---
+
+## Output Format
+
+Single JSON file containing:
+```json
+{
+  "meta": {"model", "settings", "max_turns", "timestamp"},
+  "metrics": {
+    "react_exec": {"soft_restriction_avg", "hard_restriction_avg", "by_type"},
+    "row_react_exec": {...}
+  },
+  "traces": [
+    {
+      "id": "sample_id",
+      "instruction": "...",
+      "settings": {
+        "react_exec": {
+          "turns": 1,
+          "rounds": [{round details}],
+          "final_code": "...",
+          "evaluation": {soft, hard, test_results}
+        },
+        "row_react_exec": {...}
+      }
+    }
+  ]
+}
+```
 
 ---
 
@@ -147,7 +99,7 @@ wb.save(file_path)
 
 | Metric | Description |
 |--------|-------------|
-| **Soft Restriction** | Percentage of test cases passed (0-100%) |
+| **Soft Restriction** | % of test cases passed (0-100%) |
 | **Hard Restriction** | 1 if ALL test cases pass, 0 otherwise |
 
-Paper best: ~18% Hard (GPT-4o), Human: 71%
+Paper reference: GPT-4o ~18% Hard, Human ~71% Hard
