@@ -146,6 +146,7 @@ def run_benchmark(
     max_turns: int = 5,
     use_sample: bool = False,
     data_dir: str = None,
+    dataset_type: str = "sample_200",
     output_file: str = None,
     instruction_types: list = None,
 ):
@@ -168,6 +169,7 @@ def run_benchmark(
     else:
         samples = load_spreadsheetbench(
             data_dir=data_dir,
+            dataset_type=dataset_type,
             limit=limit,
             instruction_types=instruction_types,
         )
@@ -322,6 +324,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-turns", type=int, default=5)
     parser.add_argument("--sample", action="store_true")
     parser.add_argument("--data-dir", type=str, default=None)
+    parser.add_argument("--dataset", type=str, default="sample_200",
+                        choices=["sample_200", "full_912", "verified_400"],
+                        help="Dataset: sample_200, full_912, verified_400")
     parser.add_argument("--output", "-o", type=str, default=None, help="Output JSON file")
     parser.add_argument("--cell-level", action="store_true")
     parser.add_argument("--sheet-level", action="store_true")
@@ -341,6 +346,7 @@ if __name__ == "__main__":
         max_turns=args.max_turns,
         use_sample=args.sample,
         data_dir=args.data_dir,
+        dataset_type=args.dataset,
         output_file=args.output,
         instruction_types=instruction_types,
     )
