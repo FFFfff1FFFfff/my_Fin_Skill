@@ -157,56 +157,36 @@ The solution of the question can be generate through {max_turn_num} rounds of in
 # Optimized multi-round prompt with task routing, structure probe, and self-check
 PROMPT_DF_RCT_FORMAT = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
 
-## Task Information
-- **instruction**: {instruction}
-- **spreadsheet_path**: {spreadsheet_path}
-- **instruction_type**: {instruction_type}
-- **answer_position**: {answer_position}
-- **output_path**: {output_path}
+You need to solve the given spreadsheet manipulation question, which contains six types of information:
+- instruction: The question about spreadsheet manipulation.
+- spreadsheet_path: The path of the spreadsheet file you need to manipulate.
+- spreadsheet_content: The first few rows of the content of speadsheet file.
+- instruction_type: There are two values (Cell-Level Manipulation, Sheet-Level Manipulation) used to indicate whether the answer to this question applies only to specific cells or to the entire worksheet.
+- answer_position: The position need to be modified or filled. For Cell-Level Manipulation questions, this field is filled with the cell position; for Sheet-Level Manipulation, it is the maximum range of cells you need to modify. You only need to modify or fill in values within the cell range specified by answer_position.
+- output_path: You need to generate the modified spreadsheet file in this new path.
 
-## Spreadsheet Preview (first rows of each sheet)
+Below is the spreadsheet manipulation question you need to solve:
+### instruction
+{instruction}
+
+### spreadsheet_path
+{spreadsheet_path}
+
+### spreadsheet_content
 {spreadsheet_content}
 
-## CRITICAL: Determine Output Type First
-Before writing any code, identify what the task requires:
-- If instruction mentions "formula" or "in cell X" → Write a formula string to that cell
-- If instruction mentions "VBA", "macro", "VB code" → The answer should be VBA code, but since we use Python/openpyxl, implement equivalent logic in Python
-- If instruction requires data manipulation/filtering/formatting → Modify the spreadsheet data
+### instruction_type
+{instruction_type}
 
-## Multi-Round Interaction (up to {max_turn_num} rounds)
-You can take these actions:
+### answer_position
+{answer_position}
 
-**Round 1 - ALWAYS start with structure exploration:**
-```python
-from openpyxl import load_workbook
-wb = load_workbook(spreadsheet_path)
-print("Sheets:", wb.sheetnames)
-for sheet_name in wb.sheetnames:
-    ws = wb[sheet_name]
-    print(f"\\nSheet: {{sheet_name}}, Rows: {{ws.max_row}}, Cols: {{ws.max_column}}")
-    # Print first few rows
-    for row in ws.iter_rows(min_row=1, max_row=min(5, ws.max_row), values_only=True):
-        print(row)
-wb.close()
-```
+### output_path
+{output_path}
 
-**Subsequent Rounds - Implement solution:**
-Based on the structure discovered, write the solution code.
-
-**Final Round - Self-check before saving:**
-After modifying, verify the target cell/range has the expected content:
-```python
-# Before wb.save(output_path), verify:
-print(f"Verifying answer_position: {{ws['TARGET_CELL'].value}}")
-# Then save
-wb.save(output_path)
-```
-
-## Important Notes
-- ALWAYS save to output_path (not spreadsheet_path)
-- For formulas: use `ws['A1'] = '=SUM(B1:B10)'` (string starting with =)
-- For conditional formatting: use openpyxl.formatting
-- Variables `spreadsheet_path` and `output_path` are pre-defined
+The solution of the question can be generate through {max_turn_num} rounds of interaction and you can do two types of actions.
+1. Spreadsheet information acquisition: You can generate Python code to obtain the information in the spreadsheet file. In the next turn, the execution result of you Python code will provide to you.
+2. Question solution generation: You can generate Python code for the final solution of the question. If error occur when executing code, the error traceback will provide to you for code refinement.
 """
 
 
