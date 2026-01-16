@@ -44,6 +44,97 @@ client = anthropic.Anthropic()
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
+# =============================================================================
+# Stage Monitor / Logger
+# =============================================================================
+
+class StageMonitor:
+    """Monitor and log skill execution stages."""
+
+    def __init__(self, sample_id: str, setting: str, output_dir: str):
+        self.sample_id = sample_id
+        self.setting = setting
+        self.output_dir = output_dir
+        self.rounds = []
+        self.start_time = datetime.now()
+
+    def log_skill_invoke(self, skill_name: str):
+        """Log skill invocation."""
+        print(f"    [SKILL] Invoking: {skill_name}")
+
+    def log_round_start(self, round_num: int, max_rounds: int):
+        """Log round start."""
+        print(f"    [ROUND {round_num}/{max_rounds}] Starting...")
+
+    def log_llm_response(self, round_num: int, response: str):
+        """Log LLM response (truncated for display)."""
+        preview = response[:100].replace('\n', ' ') + "..." if len(response) > 100 else response
+        print(f"    [ROUND {round_num}] LLM response: {preview}")
+
+    def log_code_extracted(self, round_num: int, code: str):
+        """Log extracted code."""
+        lines = code.count('\n') + 1
+        print(f"    [ROUND {round_num}] Code extracted: {lines} lines")
+
+    def log_execution(self, round_num: int, success: bool, output: str, error: str):
+        """Log code execution result."""
+        status = "SUCCESS" if success else "FAILED"
+        print(f"    [ROUND {round_num}] Execution: {status}")
+        if error:
+            error_preview = error[:80].replace('\n', ' ')
+            print(f"    [ROUND {round_num}] Error: {error_preview}...")
+
+    def log_round_end(self, round_num: int, output_created: bool):
+        """Log round end."""
+        if output_created:
+            print(f"    [ROUND {round_num}] Output file created - terminating")
+        else:
+            print(f"    [ROUND {round_num}] Output not created - continuing")
+
+    def add_round(self, round_num: int, response: str, code: str,
+                  exec_success: bool, exec_output: str, exec_error: str,
+                  feedback: str, output_created: bool):
+        """Record round details for logging."""
+        self.rounds.append({
+            "round": round_num,
+            "timestamp": datetime.now().isoformat(),
+            "llm_response": response,
+            "extracted_code": code,
+            "execution": {
+                "success": exec_success,
+                "stdout": exec_output,
+                "error": exec_error,
+            },
+            "feedback_to_llm": feedback,
+            "output_created": output_created,
+        })
+
+    def save_log(self, final_code: str, eval_result: dict = None):
+        """Save complete execution log to file."""
+        log_path = os.path.join(self.output_dir, f"{self.setting}_trace.json")
+
+        log_data = {
+            "sample_id": self.sample_id,
+            "setting": self.setting,
+            "start_time": self.start_time.isoformat(),
+            "end_time": datetime.now().isoformat(),
+            "total_rounds": len(self.rounds),
+            "rounds": self.rounds,
+            "final_code": final_code,
+            "evaluation": eval_result,
+        }
+
+        with open(log_path, 'w', encoding='utf-8') as f:
+            json.dump(log_data, f, indent=2, ensure_ascii=False)
+
+        print(f"    [LOG] Saved trace to {log_path}")
+        return log_path
+
+
+# =============================================================================
+# Core Functions
+# =============================================================================
+
 def call_llm(messages: list, model: str = DEFAULT_MODEL) -> str:
     """Call Claude API."""
     response = client.messages.create(
@@ -61,44 +152,81 @@ def run_pot(
     model: str = DEFAULT_MODEL,
     test_input: str = None,
     test_output: str = None,
+    monitor: StageMonitor = None,
 ) -> tuple:
     """
     Run PoT (Program of Thought) inference.
 
-    Args:
-        sample: Sample data dict
-        setting: "row_react_exec", "pure_react_exec", or "react_exec"
-        max_turns: Maximum interaction rounds
-        model: Model to use
-        test_input: Input file path for execution
-        test_output: Output file path for execution
-
     Returns:
         Tuple of (final_code, turns_used)
     """
+    # Log skill invocation
+    if monitor:
+        monitor.log_skill_invoke("spreadsheet_pot")
+
     # Build initial prompt with output_path
     prompt = build_prompt(sample, setting=setting, max_turn_num=max_turns, output_path=test_output or "output.xlsx")
     messages = [{"role": "user", "content": prompt}]
 
     # Single-round mode (react_exec)
     if setting == "react_exec":
+        if monitor:
+            monitor.log_round_start(1, 1)
         response = call_llm(messages, model=model)
-        return extract_code(response), 1
+        code = extract_code(response)
+
+        if monitor:
+            monitor.log_llm_response(1, response)
+            monitor.log_code_extracted(1, code)
+            # For single round, we don't execute during inference
+            monitor.add_round(
+                round_num=1,
+                response=response,
+                code=code,
+                exec_success=True,
+                exec_output="",
+                exec_error="",
+                feedback="(single-round mode - no execution feedback)",
+                output_created=False,
+            )
+        return code, 1
 
     # Multi-round mode (row_react_exec, pure_react_exec)
     final_code = None
     for turn in range(max_turns):
+        round_num = turn + 1
+
+        if monitor:
+            monitor.log_round_start(round_num, max_turns)
+
         # Get LLM response
         response = call_llm(messages, model=model)
         messages.append({"role": "assistant", "content": response})
+
+        if monitor:
+            monitor.log_llm_response(round_num, response)
 
         # Extract code
         code = extract_code(response)
         final_code = code
 
+        if monitor:
+            monitor.log_code_extracted(round_num, code)
+
         # No test files - return after first response
         if not test_input or not test_output:
-            return final_code, turn + 1
+            if monitor:
+                monitor.add_round(
+                    round_num=round_num,
+                    response=response,
+                    code=code,
+                    exec_success=True,
+                    exec_output="",
+                    exec_error="",
+                    feedback="(no test files)",
+                    output_created=False,
+                )
+            return final_code, round_num
 
         # Remove old output before execution
         if os.path.exists(test_output):
@@ -107,13 +235,31 @@ def run_pot(
         # Execute code
         result = execute_code(code, test_input, test_output)
 
+        if monitor:
+            monitor.log_execution(round_num, result["success"], result["output"], result["error"])
+
         # Format feedback
         feedback = format_exec_result(result, test_output)
         messages.append({"role": "user", "content": feedback})
 
         # Check termination: output file created
-        if check_output_exists(test_output):
-            return final_code, turn + 1
+        output_created = check_output_exists(test_output)
+
+        if monitor:
+            monitor.log_round_end(round_num, output_created)
+            monitor.add_round(
+                round_num=round_num,
+                response=response,
+                code=code,
+                exec_success=result["success"],
+                exec_output=result["output"],
+                exec_error=result["error"],
+                feedback=feedback,
+                output_created=output_created,
+            )
+
+        if output_created:
+            return final_code, round_num
 
     return final_code, max_turns
 
@@ -185,6 +331,13 @@ def run_benchmark(
         for run_setting in settings_to_run:
             test_output = os.path.join(sample_dir, f"{run_setting}_output.xlsx")
 
+            # Create stage monitor for this run
+            monitor = StageMonitor(
+                sample_id=str(sample['id']),
+                setting=run_setting,
+                output_dir=sample_dir,
+            )
+
             try:
                 code, turns = run_pot(
                     sample,
@@ -193,6 +346,7 @@ def run_benchmark(
                     model=model,
                     test_input=test_input,
                     test_output=test_output,
+                    monitor=monitor,
                 )
                 total_turns[run_setting] += turns
 
@@ -201,6 +355,7 @@ def run_benchmark(
                     f.write(code)
 
                 # Evaluate
+                eval_result = None
                 if sample['test_cases']:
                     eval_result = evaluate_instruction(
                         code=code,
@@ -217,6 +372,9 @@ def run_benchmark(
                     print(f"  [{run_setting}] {status} Soft:{eval_result['soft_restriction']:.0%} Turns:{turns}")
                 else:
                     print(f"  [{run_setting}] (No test cases) Turns: {turns}")
+
+                # Save execution trace log
+                monitor.save_log(final_code=code, eval_result=eval_result)
 
             except Exception as e:
                 print(f"  [{run_setting}] ERROR: {e}")
