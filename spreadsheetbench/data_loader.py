@@ -176,9 +176,10 @@ def load_spreadsheetbench(
         spreadsheet_full_path = os.path.join(data_dir, spreadsheet_rel_path)
 
         # Look for test cases (usually 3 per instruction)
+        # Official naming: {test_num}_{item_id}_init.xlsx / _golden.xlsx
         for test_num in [1, 2, 3]:
-            input_file = os.path.join(spreadsheet_full_path, f"{test_num}_{item_id}_input.xlsx")
-            answer_file = os.path.join(spreadsheet_full_path, f"{test_num}_{item_id}_answer.xlsx")
+            input_file = os.path.join(spreadsheet_full_path, f"{test_num}_{item_id}_init.xlsx")
+            answer_file = os.path.join(spreadsheet_full_path, f"{test_num}_{item_id}_golden.xlsx")
 
             if os.path.exists(input_file):
                 test_cases.append({
@@ -191,10 +192,10 @@ def load_spreadsheetbench(
             # Try alternative naming patterns
             if os.path.isdir(spreadsheet_full_path):
                 for fname in os.listdir(spreadsheet_full_path):
-                    if fname.endswith("_input.xlsx"):
+                    if fname.endswith("_init.xlsx"):
                         test_num = fname.split("_")[0]
                         input_file = os.path.join(spreadsheet_full_path, fname)
-                        answer_fname = fname.replace("_input.xlsx", "_answer.xlsx")
+                        answer_fname = fname.replace("_init.xlsx", "_golden.xlsx")
                         answer_file = os.path.join(spreadsheet_full_path, answer_fname)
                         test_cases.append({
                             "test_num": test_num,
