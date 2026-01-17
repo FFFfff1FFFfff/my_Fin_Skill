@@ -1,157 +1,63 @@
-# FinQA Skills Evaluation
+# Skill Benchmark
 
-Benchmark comparing Claude's baseline vs skill-augmented performance on financial question answering.
+Benchmark comparing Claude's baseline vs skill-augmented performance on QA tasks.
 
+## Benchmarks & Commands
 
-
-## Results
-
-
-Using the first 100 samples from the FinQA test dataset:
- 
-
-- **Baseline**: 63% accuracy
-
-- **With Skills**: 72% accuracy
-
- 
-
-## Dataset
-
-
-- **Source**: FinQA test set (first 100 samples)
-
-- **Tasks**: Financial QA requiring percentage calculations, changes, multi-step arithmetic, and table data extraction
-
- 
+| Benchmark | Task | Metric | Command |
+|-----------|------|--------|---------|
+| **FinQA** | Financial QA | Exact Match | `python finqa/runner.py --limit 50` |
+| **TableBench** | Table QA | EM / EM±10% | `python tablebench/runner.py --source hf --limit 50` |
+| **SealQA** | Search QA | LLM Grading | `python sealqa/runner.py --search --limit 10` |
+| **MMLongBench** | PDF QA | ANLS / F1 | `python mmlongbench/runner.py --limit 50` |
+| **ChartQAPro** | Chart QA | Relaxed Acc | `python chartqapro/runner.py --limit 50` |
+| **SpreadsheetBench** | Excel Code Gen | Hard/Soft | `python spreadsheetbench/runner.py --mode all --limit 20` |
 
 ## Skills
 
+| Skill | Purpose | Benchmark |
+|-------|---------|-----------|
+| `finqa_reasoning` | Step-by-step financial calculation | FinQA |
+| `formula_code_assistant` | Generate Python for numeric computation | FinQA |
+| `table_reasoning` | Structured table analysis | TableBench |
+| `web_search_tool` | Web search integration | SealQA |
+| `conflicting_info_reasoner` | Resolve contradictory sources | SealQA |
+| `pdf_document_qa` | PDF comprehension strategies | MMLongBench |
+| `pdf_text_extractor` | Extract text/tables from PDF | MMLongBench |
+| `chart_data_extractor` | Extract data from chart images | ChartQAPro |
+| `spreadsheet_schema_analyzer` | Excel structure analysis | SpreadsheetBench |
 
-### 1. finqa-reasoning
-
-
-6-step systematic reasoning framework for financial questions:
-
-- Question type identification
-
-- Data location and extraction
-
-- Data verification (units, time periods)
-
-- Formula selection
-
-- Calculation
-
-- Answer formatting
-
- 
-
-### 2. formula-code-assistant
-
-
-Three calculation tools for complex computations:
-
-- `generate_calculation_formula()` - Step-by-step formula breakdowns
-
-- `generate_python_code()` - Executable Python code generation
-
-- `execute_calculation()` - Python expression execution
-
- 
-
-
-## Methodology
-
-
-1. **Baseline**: Direct prompting with minimal guidance
-
-2. **With Skills**: Claude receives skill documentation + access to calculation tools via Anthropic API
-
-3. **Evaluation**: LLM judge compares predictions to ground truth
-
- 
-
-**LLM Judge Caveat**: Automated judge struggles with decimal precision, percentage formatting, and rounding variations. Results were manually verified for accuracy.
-
- 
-
-## Installation
-
- 
+## Key Options
 
 ```bash
+# FinQA - specify dataset file
+python finqa/runner.py --source test.json --limit 50
 
-pip install -r requirements.txt
+# SealQA - enable web search
+python sealqa/runner.py --search --backend builtin --limit 10
 
-export ANTHROPIC_API_KEY="your-api-key"
+# MMLongBench - reports both all & answerable-only metrics
+python mmlongbench/runner.py --official --limit 50
 
+# ChartQAPro - filter by type
+python chartqapro/runner.py --type Reasoning --limit 50
+
+# SpreadsheetBench - compare baseline vs react
+python spreadsheetbench/runner.py --mode all --limit 20
+
+# SpreadsheetBench - filter by instruction type
+python spreadsheetbench/runner.py --cell-level --limit 50
 ```
-
- 
-
-## Usage
-
- 
-
-```bash
-
-# Test samples 1-10 (default)
-
-python compare_with_tools.py
-
-
-
-# Test 50 samples
-
-python compare_with_tools.py --start 0 --limit 50
-
-```
-
- 
-
-**Options**:
-
-- `--dataset`: Dataset path (default: `finqa_test.json`)
-
-- `--start`: Start index, 0-based (default: `0`)
-
-- `--end`: End index, exclusive (default: `10`)
-
-- `--limit`: Number of samples (alternative to `--end`)
-
- 
-
-## Output Files
-
- 
-
-- `results_baseline_{range}.txt` - Baseline predictions
-
-- `results_with_skills_{range}.txt` - Skills predictions with reasoning traces
-
- 
 
 ## Project Structure
 
- 
-
 ```
-
-my_Fin_Skill/
-
-├── skills/
-
-│   ├── finqa-reasoning/SKILL.md
-
-│   └── formula-code-assistant/
-
-│       ├── SKILL.md
-
-│       └── calculation_tools.py
-
-├── compare_with_tools.py        # Main evaluation script
-
-├── skill_system.py              # Skill loader and manager
-
-└── finqa_test.json              # Dataset
+├── finqa/              # Financial QA
+├── tablebench/         # Table QA
+├── sealqa/             # Search-augmented QA
+├── mmlongbench/        # PDF Document QA
+├── chartqapro/         # Chart QA
+├── spreadsheetbench/   # Spreadsheet manipulation
+├── skills/             # Skill prompts (SKILL.md files)
+└── skill_system.py     # Skill loader
+```
