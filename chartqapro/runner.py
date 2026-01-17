@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,6 +21,47 @@ from data_loader import load_chartqapro, load_sample_data, get_question_type_sta
 from evaluator import relaxed_correctness, evaluate_batch
 
 client = Anthropic()
+
+
+# =============================================================================
+# STAGE PARSING: Extract structured reasoning stages from CoT response
+# =============================================================================
+
+def parse_cot_stages(response_text: str) -> dict:
+    """
+    Parse CoT response to extract structured reasoning stages.
+
+    Expected format in response:
+    [DATA]: ...
+    [READ]: ...
+    [CALC]: ...
+    [VERIFY]: ...
+    Final Answer: ...
+    """
+    stages = {
+        "data": None,      # What data is needed
+        "read": None,      # Values read from chart
+        "calc": None,      # Calculation/reasoning
+        "verify": None,    # Verification
+        "final": None,     # Final answer
+        "raw": response_text,  # Full response for debugging
+    }
+
+    # Extract each stage using regex
+    patterns = {
+        "data": r'\[DATA\]:\s*(.+?)(?=\[READ\]|\[CALC\]|\[VERIFY\]|Final Answer:|$)',
+        "read": r'\[READ\]:\s*(.+?)(?=\[CALC\]|\[VERIFY\]|Final Answer:|$)',
+        "calc": r'\[CALC\]:\s*(.+?)(?=\[VERIFY\]|Final Answer:|$)',
+        "verify": r'\[VERIFY\]:\s*(.+?)(?=Final Answer:|$)',
+        "final": r'Final Answer:\s*(.+?)(?:\n|$)',
+    }
+
+    for stage, pattern in patterns.items():
+        match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+        if match:
+            stages[stage] = match.group(1).strip()
+
+    return stages
 
 
 def create_image_message(image_base64: str, text: str) -> list:
@@ -77,8 +119,14 @@ def extract_final_answer(text: str) -> str:
 # =============================================================================
 
 def ask_baseline(image_base64: str, questions: list, question_type: str,
-                 model: str = "claude-sonnet-4-5-20250929") -> list:
-    """Baseline: direct questions without CoT."""
+                 model: str = "claude-sonnet-4-5-20250929",
+                 verbose: bool = True) -> tuple:
+    """
+    Baseline: direct questions without CoT.
+
+    Returns:
+        tuple: (answers_list, trace_list) where trace contains call info
+    """
     format_hints = {
         "Fact Checking": "Output ONLY 'True' or 'False'.",
         "Multi Choice": "Output ONLY the letter (A, B, C, or D).",
@@ -88,9 +136,10 @@ def ask_baseline(image_base64: str, questions: list, question_type: str,
     }
 
     answers = []
+    traces = []
     conversation_history = []
 
-    for question in questions:
+    for q_idx, question in enumerate(questions):
         hint = format_hints.get(question_type, "Output ONLY the answer.")
         context = ""
         if question_type == "Conversational" and conversation_history:
@@ -102,79 +151,144 @@ def ask_baseline(image_base64: str, questions: list, question_type: str,
 
 Answer:"""
 
+        if verbose:
+            print(f"      [Direct Q{q_idx+1}] LLM...", end="", flush=True)
+
+        start_time = time.time()
         response = client.messages.create(
             model=model, max_tokens=50, temperature=0,
             messages=create_image_message(image_base64, prompt)
         )
+        duration_ms = int((time.time() - start_time) * 1000)
 
-        answer = response.content[0].text.strip().split('\n')[0].strip()
+        response_text = response.content[0].text
+        answer = response_text.strip().split('\n')[0].strip()
         for prefix in ["Answer:", "The answer is", "A:", "**"]:
             if answer.lower().startswith(prefix.lower()):
                 answer = answer[len(prefix):].strip()
         answer = answer.rstrip('*').strip()
 
+        if verbose:
+            print(f" {len(response_text)}c {duration_ms}ms -> \"{answer}\"")
+
+        # Build trace
+        trace = {
+            "question_idx": q_idx,
+            "question": question,
+            "prompt": prompt,
+            "response": response_text,
+            "extracted_answer": answer,
+            "duration_ms": duration_ms,
+            "response_length": len(response_text),
+        }
+        traces.append(trace)
+
         answers.append(answer)
         conversation_history.append((question, answer))
 
-    return answers
+    return answers, traces
 
 
 # =============================================================================
-# SKILL: Chain-of-Thought (CoT)
+# SKILL: Chain-of-Thought (CoT) with Structured Output
 # =============================================================================
 
 def ask_with_cot(image_base64: str, questions: list, question_type: str,
-                 model: str = "claude-sonnet-4-5-20250929") -> list:
+                 model: str = "claude-sonnet-4-5-20250929",
+                 verbose: bool = True) -> tuple:
     """
-    Skill: Chain-of-Thought reasoning.
+    Skill: Chain-of-Thought reasoning with structured output format.
 
     Paper finding: CoT significantly outperforms direct answering for closed-source models.
     Claude Sonnet 3.5 achieved highest accuracy (55.81%) with CoT.
+
+    Returns:
+        tuple: (answers_list, trace_list) where trace contains detailed call info
     """
     format_rules = {
-        "Fact Checking": "Final answer must be EXACTLY: True or False",
-        "Multi Choice": "Final answer must be EXACTLY one letter: A, B, C, or D",
-        "Reasoning": "Final answer must be ONLY the number/value (no units, no explanation)",
-        "Hypothetical": "Final answer must be ONLY the short answer (no explanation)",
-        "Conversational": "Final answer must be ONLY the short answer (no explanation)",
+        "Fact Checking": "EXACTLY 'True' or 'False'",
+        "Multi Choice": "EXACTLY one letter: A, B, C, or D",
+        "Reasoning": "ONLY the number/value (no units)",
+        "Hypothetical": "ONLY the short answer",
+        "Conversational": "ONLY the short answer",
     }
 
     answers = []
+    traces = []
     conversation_history = []
 
-    for question in questions:
-        rule = format_rules.get(question_type, "Final answer must be concise, no explanation.")
+    for q_idx, question in enumerate(questions):
+        rule = format_rules.get(question_type, "concise answer only")
         context = ""
         if question_type == "Conversational" and conversation_history:
             context = "Previous Q&A:\n" + "\n".join(f"Q: {q} → A: {a}" for q, a in conversation_history) + "\n\n"
 
+        # Structured CoT prompt for easy parsing
         prompt = f"""{context}Question: {question}
 
-Think step by step:
-1. What specific data do I need to read from the chart?
-2. Read those values carefully from the chart
-3. Apply reasoning/calculation if needed
-4. Verify the answer makes sense
+Analyze step by step using this EXACT format:
 
-IMPORTANT FORMAT RULES:
+[DATA]: What specific data do I need from the chart to answer this question?
+[READ]: List the actual values I can read from the chart (be precise)
+[CALC]: Show any calculation or reasoning steps
+[VERIFY]: Quick sanity check - does my answer make sense?
+
+Final Answer: [your answer here]
+
+RULES for Final Answer:
 - {rule}
-- Do NOT include units (like "players", "million", "%")
-- Do NOT include explanations after the answer
-- If the chart does not contain enough information, answer "Cannot determine"
+- NO units (not "40 players", just "40")
+- NO explanation after the answer
+- If chart lacks info, answer "Cannot determine"
+"""
 
-End with EXACTLY this format:
-Final Answer: [value only]"""
+        if verbose:
+            print(f"      [CoT Q{q_idx+1}] LLM...", end="", flush=True)
 
+        start_time = time.time()
         response = client.messages.create(
-            model=model, max_tokens=500, temperature=0,
+            model=model, max_tokens=600, temperature=0,
             messages=create_image_message(image_base64, prompt)
         )
+        duration_ms = int((time.time() - start_time) * 1000)
 
-        answer = extract_final_answer(response.content[0].text)
+        response_text = response.content[0].text
+        stages = parse_cot_stages(response_text)
+        answer = stages["final"] if stages["final"] else extract_final_answer(response_text)
+
+        if verbose:
+            print(f" {len(response_text)}c {duration_ms}ms")
+            if stages["data"]:
+                print(f"        → Data: {stages['data'][:60]}...")
+            if stages["read"]:
+                print(f"        → Read: {stages['read'][:60]}...")
+            if stages["calc"]:
+                print(f"        → Calc: {stages['calc'][:60]}...")
+            if stages["final"]:
+                print(f"        → Final: {stages['final']}")
+
+        # Build trace for this call
+        trace = {
+            "question_idx": q_idx,
+            "question": question,
+            "prompt": prompt,
+            "response": response_text,
+            "stages": {
+                "data": stages["data"],
+                "read": stages["read"],
+                "calc": stages["calc"],
+                "verify": stages["verify"],
+            },
+            "extracted_answer": answer,
+            "duration_ms": duration_ms,
+            "response_length": len(response_text),
+        }
+        traces.append(trace)
+
         answers.append(answer)
         conversation_history.append((question, answer))
 
-    return answers
+    return answers, traces
 
 
 # =============================================================================
@@ -228,49 +342,57 @@ def run_benchmark(limit: int = None,
         year_flags = sample["year_flags"]
         image_base64 = sample["image_base64"]
 
-        print(f"\n[{i+1}/{len(samples)}] Type: {question_type}")
-        print(f"Q: {questions[0][:60]}..." if len(questions[0]) > 60 else f"Q: {questions[0]}")
-        print(f"A: {answers[-1]}")
+        print(f"\n[{i+1}/{len(samples)}] Type: {question_type} | ID: {sample['id']}")
+        print(f"    Q: {questions[0][:70]}..." if len(questions[0]) > 70 else f"    Q: {questions[0]}")
+        print(f"    A: {answers[-1]}")
 
         # Baseline (direct)
+        baseline_trace = None
         try:
-            pred_baseline = ask_baseline(image_base64, questions, question_type, model)
+            pred_baseline, baseline_trace = ask_baseline(image_base64, questions, question_type, model)
             score_baseline = relaxed_correctness(answers, pred_baseline, year_flags, question_type)
-            print(f"Direct: {pred_baseline[-1][:40]} -> {score_baseline:.2f}")
+            status = "✓" if score_baseline >= 1.0 else "✗"
+            print(f"    [Direct Result] {pred_baseline[-1][:30]} -> {score_baseline:.2f} {status}")
         except Exception as e:
             pred_baseline = [""] * len(questions)
             score_baseline = 0.0
-            print(f"Direct: ERROR - {e}")
+            print(f"    [Direct] ERROR - {e}")
 
         results_baseline.append({
             "id": sample["id"],
             "questions": questions,
-            "answers": answers,
+            "ground_truth": answers,
             "question_type": question_type,
             "year_flags": year_flags,
             "predictions": pred_baseline,
-            "score": score_baseline
+            "score": score_baseline,
+            "correct": score_baseline >= 1.0,
+            "trace": baseline_trace,  # Full conversation trace
         })
 
         # With CoT
         if use_cot:
+            cot_trace = None
             try:
-                pred_cot = ask_with_cot(image_base64, questions, question_type, model)
+                pred_cot, cot_trace = ask_with_cot(image_base64, questions, question_type, model)
                 score_cot = relaxed_correctness(answers, pred_cot, year_flags, question_type)
-                print(f"CoT:    {pred_cot[-1][:40]} -> {score_cot:.2f}")
+                status = "✓" if score_cot >= 1.0 else "✗"
+                print(f"    [CoT Result] {pred_cot[-1][:30]} -> {score_cot:.2f} {status}")
             except Exception as e:
                 pred_cot = [""] * len(questions)
                 score_cot = 0.0
-                print(f"CoT:    ERROR - {e}")
+                print(f"    [CoT] ERROR - {e}")
 
             results_cot.append({
                 "id": sample["id"],
                 "questions": questions,
-                "answers": answers,
+                "ground_truth": answers,
                 "question_type": question_type,
                 "year_flags": year_flags,
                 "predictions": pred_cot,
-                "score": score_cot
+                "score": score_cot,
+                "correct": score_cot >= 1.0,
+                "trace": cot_trace,  # Full conversation trace with stages
             })
 
     # Evaluate
@@ -300,26 +422,54 @@ def run_benchmark(limit: int = None,
         improvement = eval_cot['accuracy'] - eval_baseline['accuracy']
         print(f"\nImprovement: {improvement:+.1%}")
 
-    # Save results
+    # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
-        "timestamp": timestamp,
-        "model": model,
-        "num_samples": len(samples),
-        "direct": {
-            "accuracy": eval_baseline['accuracy'],
-            "by_type": eval_baseline['by_type'],
-            "results": results_baseline
+        "meta": {
+            "timestamp": timestamp,
+            "model": model,
+            "num_samples": len(samples),
+            "question_types": list(stats.keys()),
+        },
+        "summary": {
+            "direct": {
+                "accuracy": eval_baseline['accuracy'],
+                "by_type": eval_baseline['by_type'],
+                "total_correct": sum(1 for r in results_baseline if r.get("correct")),
+                "total": len(results_baseline),
+            },
+        },
+        "traces": {
+            "direct": results_baseline,
         },
     }
 
     if eval_cot:
-        output["cot"] = {
+        output["summary"]["cot"] = {
             "accuracy": eval_cot['accuracy'],
             "by_type": eval_cot['by_type'],
-            "results": results_cot
+            "total_correct": sum(1 for r in results_cot if r.get("correct")),
+            "total": len(results_cot),
         }
-        output["improvement"] = eval_cot['accuracy'] - eval_baseline['accuracy']
+        output["summary"]["improvement"] = eval_cot['accuracy'] - eval_baseline['accuracy']
+        output["traces"]["cot"] = results_cot
+
+        # Add comparison trace (side-by-side)
+        comparison = []
+        for b, c in zip(results_baseline, results_cot):
+            comparison.append({
+                "id": b["id"],
+                "question_type": b["question_type"],
+                "question": b["questions"][0] if b["questions"] else "",
+                "ground_truth": b["ground_truth"][-1] if b["ground_truth"] else "",
+                "direct_pred": b["predictions"][-1] if b["predictions"] else "",
+                "direct_correct": b.get("correct", False),
+                "cot_pred": c["predictions"][-1] if c["predictions"] else "",
+                "cot_correct": c.get("correct", False),
+                "cot_improved": c.get("correct", False) and not b.get("correct", False),
+                "cot_regressed": b.get("correct", False) and not c.get("correct", False),
+            })
+        output["comparison"] = comparison
 
     output_file = f"chartqapro_results_{timestamp}.json"
     with open(output_file, "w", encoding="utf-8") as f:
