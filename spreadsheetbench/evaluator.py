@@ -337,8 +337,8 @@ def evaluate_instruction(
         input_path = tc["input_file"]
         answer_path = tc.get("answer_file")
 
-        # Create output path
-        output_filename = os.path.basename(input_path).replace("_input.xlsx", "_output.xlsx")
+        # Create output path (input file is *_init.xlsx)
+        output_filename = os.path.basename(input_path).replace("_init.xlsx", "_output.xlsx")
         output_path = os.path.join(output_dir, output_filename)
 
         if answer_path is None:

@@ -123,6 +123,14 @@ Below is the spreadsheet manipulation question you need to solve:
 
 You should generate Python code for the final solution of the question.
 
+CRITICAL: In your code, you MUST use the variables `spreadsheet_path` and `output_path` (these are pre-defined Python variables). Do NOT hardcode file paths as strings. Example:
+```python
+from openpyxl import load_workbook
+wb = load_workbook(spreadsheet_path)  # Use variable, not literal path
+# ... your modifications ...
+wb.save(output_path)  # Use variable, not literal path
+```
+
 IMPORTANT: If the instruction asks for a "formula", you must write the formula as a string starting with "=", e.g., `ws['A1'] = '=SUM(B1:B10)'`. Do NOT compute and write the numeric value - write the actual Excel formula.
 """
 
@@ -154,9 +162,17 @@ Below is the spreadsheet manipulation question you need to solve:
 The solution of the question can be generate through {max_turn_num} rounds of interaction and you can do two types of actions.
 1. Spreadsheet information acquisition: You can generate Python code to obtain the information in the spreadsheet file. In the next turn, the execution result of you Python code will provide to you.
 2. Question solution generation: You can generate Python code for the final solution of the question. If error occur when executing code, the error traceback will provide to you for code refinement.
+
+CRITICAL: In your code, you MUST use the variables `spreadsheet_path` and `output_path` (these are pre-defined Python variables). Do NOT hardcode file paths as strings. Example:
+```python
+from openpyxl import load_workbook
+wb = load_workbook(spreadsheet_path)  # Use variable, not literal path
+# ... your modifications ...
+wb.save(output_path)  # Use variable, not literal path
+```
 """
 
-# Optimized multi-round prompt with task routing, structure probe, and self-check
+# Multi-round prompt with spreadsheet preview
 PROMPT_DF_RCT_FORMAT = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
 
 You need to solve the given spreadsheet manipulation question, which contains six types of information:
@@ -189,6 +205,14 @@ Below is the spreadsheet manipulation question you need to solve:
 The solution of the question can be generate through {max_turn_num} rounds of interaction and you can do two types of actions.
 1. Spreadsheet information acquisition: You can generate Python code to obtain the information in the spreadsheet file. In the next turn, the execution result of you Python code will provide to you.
 2. Question solution generation: You can generate Python code for the final solution of the question. If error occur when executing code, the error traceback will provide to you for code refinement.
+
+CRITICAL: In your code, you MUST use the variables `spreadsheet_path` and `output_path` (these are pre-defined Python variables). Do NOT hardcode file paths as strings. Example:
+```python
+from openpyxl import load_workbook
+wb = load_workbook(spreadsheet_path)  # Use variable, not literal path
+# ... your modifications ...
+wb.save(output_path)  # Use variable, not literal path
+```
 
 IMPORTANT: If the instruction asks for a "formula", you must write the formula as a string starting with "=", e.g., `ws['A1'] = '=SUM(B1:B10)'`. Do NOT compute and write the numeric value - write the actual Excel formula.
 """
