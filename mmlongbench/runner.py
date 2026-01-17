@@ -308,6 +308,7 @@ If information is not in the document, state "Not answerable"."""
 
 
 def run_benchmark(limit: int = None,
+                  offset: int = 0,
                   model: str = "claude-sonnet-4-5-20250929",
                   use_sample: bool = False,
                   use_images: bool = False,
@@ -342,11 +343,23 @@ def run_benchmark(limit: int = None,
         print("Answer extraction: Regex")
 
     # Load data (always load all, report both metrics)
-    print(f"\nLoading data (limit={limit})...")
+    print(f"\nLoading data (limit={limit}, offset={offset})...")
     if use_sample:
         samples = load_sample_data()
     else:
-        samples = load_mmlongbench(limit=limit, skip_unanswerable=False)
+        # Load enough samples to cover offset + limit
+        load_limit = (offset + limit) if limit else None
+        samples = load_mmlongbench(limit=load_limit, skip_unanswerable=False)
+
+    # Apply offset
+    if offset > 0:
+        samples = samples[offset:]
+        print(f"Skipped first {offset} samples")
+
+    # Apply limit after offset
+    if limit and len(samples) > limit:
+        samples = samples[:limit]
+
     print(f"Loaded {len(samples)} samples")
 
     # Load skills
@@ -579,6 +592,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MMLongBench-Doc Skill Benchmark")
     parser.add_argument("--limit", type=int, default=None,
                         help="Number of samples (default: all)")
+    parser.add_argument("--offset", type=int, default=0,
+                        help="Skip first N samples")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929")
     parser.add_argument("--sample", action="store_true",
                         help="Use sample data for testing")
@@ -597,6 +612,7 @@ if __name__ == "__main__":
 
     run_benchmark(
         limit=args.limit,
+        offset=args.offset,
         model=args.model,
         use_sample=args.sample,
         use_images=use_images,
