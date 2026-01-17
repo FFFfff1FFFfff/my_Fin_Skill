@@ -141,6 +141,7 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
 
 def run_benchmark(
     limit: int = None,
+    offset: int = 0,
     model: str = DEFAULT_MODEL,
     setting: str = "row_react_exec",
     max_turns: int = 5,
@@ -167,12 +168,21 @@ def run_benchmark(
         samples = load_sample_data()
         print("Using sample data (no evaluation)")
     else:
+        # Load enough samples to cover offset + limit
+        load_limit = (offset + limit) if limit else None
         samples = load_spreadsheetbench(
             data_dir=data_dir,
             dataset_type=dataset_type,
-            limit=limit,
+            limit=load_limit,
             instruction_types=instruction_types,
         )
+        # Apply offset
+        if offset > 0:
+            samples = samples[offset:]
+            print(f"Skipped first {offset} samples")
+        # Apply limit after offset
+        if limit and len(samples) > limit:
+            samples = samples[:limit]
 
     if not samples:
         print("No samples. Exiting.")
@@ -328,6 +338,7 @@ if __name__ == "__main__":
                         choices=["sample_200", "full_912", "verified_400"],
                         help="Dataset: sample_200, full_912, verified_400")
     parser.add_argument("--output", "-o", type=str, default=None, help="Output JSON file")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N samples")
     parser.add_argument("--cell-level", action="store_true")
     parser.add_argument("--sheet-level", action="store_true")
 
@@ -341,6 +352,7 @@ if __name__ == "__main__":
 
     run_benchmark(
         limit=args.limit,
+        offset=args.offset,
         model=args.model,
         setting=args.setting,
         max_turns=args.max_turns,
