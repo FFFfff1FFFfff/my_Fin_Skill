@@ -59,29 +59,7 @@ def parse_cot_stages(response_text: str) -> dict:
     for stage, pattern in patterns.items():
         match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
         if match:
-            content = match.group(1).strip()
-            # Filter out cases where LLM repeated the prompt question
-            if content and not content.startswith("What specific data") and \
-               not content.startswith("List the actual") and \
-               not content.startswith("Show any calculation") and \
-               not content.startswith("Quick sanity"):
-                stages[stage] = content
-
-    # More robust Final Answer extraction
-    if not stages["final"]:
-        # Try alternative patterns
-        alt_patterns = [
-            r'Final Answer:\s*\*?\*?(.+?)\*?\*?\s*$',  # Handle **answer**
-            r'(?:The answer is|Answer:)\s*(.+?)(?:\n|$)',
-            r'\n([A-D])\s*$',  # Single letter at end for multi-choice
-            r'\n(True|False)\s*$',  # True/False at end
-            r'\n(\d+(?:\.\d+)?)\s*$',  # Number at end
-        ]
-        for pat in alt_patterns:
-            match = re.search(pat, response_text, re.IGNORECASE | re.MULTILINE)
-            if match:
-                stages["final"] = match.group(1).strip().strip('*').strip()
-                break
+            stages[stage] = match.group(1).strip()
 
     return stages
 
@@ -248,29 +226,21 @@ def ask_with_cot(image_base64: str, questions: list, question_type: str,
         # Structured CoT prompt for easy parsing
         prompt = f"""{context}Question: {question}
 
-You MUST follow this EXACT output format (do NOT repeat the questions, just fill in your analysis):
+Analyze step by step using this EXACT format:
 
-[DATA]: <describe what data you need to find>
-[READ]: <list the actual values you read from the chart>
-[CALC]: <show your calculation or reasoning>
-[VERIFY]: <brief sanity check>
+[DATA]: What specific data do I need from the chart to answer this question?
+[READ]: List the actual values I can read from the chart (be precise)
+[CALC]: Show any calculation or reasoning steps
+[VERIFY]: Quick sanity check - does my answer make sense?
 
-Final Answer: <your answer>
+Final Answer: [your answer here]
 
-EXAMPLE of correct format:
-[DATA]: I need the sales values for 2020 and 2021
-[READ]: 2020 = 150, 2021 = 200
-[CALC]: Difference = 200 - 150 = 50
-[VERIFY]: Positive growth makes sense given the upward trend
-Final Answer: 50
-
-RULES:
+RULES for Final Answer:
 - {rule}
-- NO units in final answer (not "50 million", just "50")
-- NO explanation after Final Answer
-- If unsure, answer "Cannot determine"
-
-Now analyze the chart:"""
+- NO units (not "40 players", just "40")
+- NO explanation after the answer
+- If chart lacks info, answer "Cannot determine"
+"""
 
         if verbose:
             print(f"      [CoT Q{q_idx+1}] LLM...", end="", flush=True)
