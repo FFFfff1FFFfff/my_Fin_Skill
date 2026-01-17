@@ -172,7 +172,64 @@ wb.save(output_path)  # Use variable, not literal path
 ```
 """
 
-# Multi-round prompt with spreadsheet preview
+# Multi-round prompt for Cell-Level tasks (execute-first strategy)
+PROMPT_DF_RCT_FORMAT_CELL_LEVEL = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
+
+You need to solve the given spreadsheet manipulation question, which contains six types of information:
+- instruction: The question about spreadsheet manipulation.
+- spreadsheet_path: The path of the spreadsheet file you need to manipulate.
+- spreadsheet_content: The first few rows of the content of speadsheet file.
+- instruction_type: There are two values (Cell-Level Manipulation, Sheet-Level Manipulation) used to indicate whether the answer to this question applies only to specific cells or to the entire worksheet.
+- answer_position: The position need to be modified or filled. For Cell-Level Manipulation questions, this field is filled with the cell position; for Sheet-Level Manipulation, it is the maximum range of cells you need to modify. You only need to modify or fill in values within the cell range specified by answer_position.
+- output_path: You need to generate the modified spreadsheet file in this new path.
+
+Below is the spreadsheet manipulation question you need to solve:
+### instruction
+{instruction}
+
+### spreadsheet_path
+{spreadsheet_path}
+
+### spreadsheet_content
+{spreadsheet_content}
+
+### instruction_type
+{instruction_type}
+
+### answer_position
+{answer_position}
+
+### output_path
+{output_path}
+
+You have {max_turn_num} rounds to solve this task. Follow this strategy:
+
+ROUND 1: Generate complete solution code immediately based on the instruction and spreadsheet_content. Do NOT just explore or print data - directly write the solution code that modifies cells and saves the file.
+
+ROUND 2+: If errors occurred, fix them based on the error feedback. If the output was incorrect, adjust your logic.
+
+CRITICAL RULES:
+1. In your code, you MUST use the variables `spreadsheet_path` and `output_path` (these are pre-defined Python variables). Do NOT hardcode file paths as strings.
+
+2. IMPORTANT - COMPUTE VALUES, NOT FORMULAS: Even if the instruction says "write a formula", you should use Python to calculate the actual numeric result and write that value to the cell. Do NOT write Excel formula strings like '=SUM(...)' because the evaluation environment cannot execute Excel formulas - they will appear as None.
+
+   Example - WRONG:
+   ```python
+   ws['D2'] = '=SUM(A2:C2)'  # Will be read as None!
+   ```
+
+   Example - CORRECT:
+   ```python
+   total = sum([ws[f'{{col}}2'].value for col in ['A', 'B', 'C'] if ws[f'{{col}}2'].value])
+   ws['D2'] = total  # Write the computed value
+   ```
+
+3. Your code MUST include `wb.save(output_path)` to save the file.
+
+4. Do not waste rounds on exploration. Act decisively based on the provided spreadsheet_content.
+"""
+
+# Multi-round prompt with spreadsheet preview (for Sheet-Level tasks)
 PROMPT_DF_RCT_FORMAT = """You are a spreadsheet expert who can manipulate spreadsheets through Python code.
 
 You need to solve the given spreadsheet manipulation question, which contains six types of information:
@@ -242,6 +299,9 @@ def build_prompt(sample: dict, setting: str, max_turn_num: int, output_path: str
     }
 
     if setting == "row_react_exec":
+        # Use Cell-Level specific prompt for Cell-Level tasks
+        if sample.get("instruction_type") == "Cell-Level Manipulation":
+            return PROMPT_DF_RCT_FORMAT_CELL_LEVEL.format(**params)
         return PROMPT_DF_RCT_FORMAT.format(**params)
     elif setting == "pure_react_exec":
         return PROMPT_NO_DF_RCT_FORMAT.format(**params)
