@@ -117,6 +117,184 @@ def extract_answer_from_output(output: str) -> str:
 
 
 # =============================================================================
+# VISUALIZATION: Chart generation and evaluation
+# =============================================================================
+
+def extract_chart_data(plt_module) -> list:
+    """Extract y-data from matplotlib figure for comparison."""
+    try:
+        ax = plt_module.gca()
+        data = []
+
+        # Try line plots
+        for line in ax.get_lines():
+            ydata = line.get_ydata()
+            if len(ydata) > 0:
+                data.extend([float(y) for y in ydata if not (isinstance(y, float) and y != y)])
+
+        # Try bar plots
+        for patch in ax.patches:
+            height = patch.get_height()
+            if height and not (isinstance(height, float) and height != height):
+                data.append(float(height))
+
+        # Try pie charts (from wedges)
+        for child in ax.get_children():
+            if hasattr(child, 'theta2') and hasattr(child, 'theta1'):
+                # Pie wedge - calculate proportion
+                angle = child.theta2 - child.theta1
+                data.append(round(angle / 360.0, 4))
+
+        return data
+    except Exception:
+        return []
+
+
+def execute_chart_code(code: str, timeout_seconds: int = 15) -> tuple:
+    """
+    Execute matplotlib code and extract chart data.
+
+    Returns:
+        tuple: (success: bool, chart_data: list, error: str)
+    """
+    if not code:
+        return False, [], "No code to execute"
+
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        import matplotlib.pyplot as plt
+
+        # Prepare execution environment
+        exec_globals = {
+            '__builtins__': __builtins__,
+            'plt': plt,
+            'pd': None,
+            'json': json,
+        }
+
+        try:
+            import pandas as pd
+            exec_globals['pd'] = pd
+        except ImportError:
+            pass
+
+        # Clear any existing figures
+        plt.clf()
+        plt.close('all')
+
+        # Set timeout
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Code execution timed out")
+
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_seconds)
+
+        # Execute code
+        exec(code, exec_globals)
+
+        # Cancel timeout
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+        # Extract chart data
+        chart_data = extract_chart_data(plt)
+
+        # Clean up
+        plt.close('all')
+
+        return True, chart_data, ""
+
+    except TimeoutError as e:
+        signal.alarm(0)
+        return False, [], str(e)
+    except Exception as e:
+        signal.alarm(0)
+        return False, [], f"{type(e).__name__}: {str(e)}"
+
+
+def compare_chart_data(pred_data: list, ref_data: list, tolerance: float = 0.02) -> bool:
+    """Compare predicted chart data with reference data."""
+    if not pred_data or not ref_data:
+        return False
+
+    # Sort both lists for comparison
+    pred_sorted = sorted([round(x, 2) for x in pred_data])
+    ref_sorted = sorted([round(x, 2) for x in ref_data])
+
+    if len(pred_sorted) != len(ref_sorted):
+        return False
+
+    # Compare with tolerance
+    for p, r in zip(pred_sorted, ref_sorted):
+        if abs(p - r) > tolerance * max(abs(r), 1):
+            return False
+
+    return True
+
+
+def ask_visualization(question: str, table: str, model: str = "claude-sonnet-4-5-20250929",
+                      verbose: bool = True) -> tuple:
+    """
+    Generate matplotlib code for visualization task.
+
+    Returns:
+        tuple: (code: str, trace_dict)
+    """
+    # Official Visualization prompt format
+    prompt = f"""You are a data visualization expert. Generate Python matplotlib code to create the requested chart.
+
+**MANDATORY CODE FORMAT:**
+Your code must start with these exact three lines:
+```python
+import matplotlib.pyplot as plt
+import pandas as pd
+import json
+```
+
+Then:
+1. Parse the table data from JSON
+2. Create the visualization using matplotlib
+3. Do NOT call plt.show() - just create the figure
+
+**Table (JSON format):**
+{table}
+
+**Task:** {question}
+
+Generate the complete Python code inside ```python``` block:"""
+
+    if verbose:
+        print(f"      [VIZ] LLM...", end="", flush=True)
+
+    start_time = time.time()
+    response = client.messages.create(
+        model=model,
+        max_tokens=2000,
+        temperature=0,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    full_response = response.content[0].text.strip()
+    code = extract_python_code(full_response)
+
+    if verbose:
+        print(f" {len(full_response)}c {duration_ms}ms")
+        if code:
+            print(f"        → Code: {code.split(chr(10))[0][:50]}...")
+
+    trace = {
+        "prompt": prompt[:500] + "...",
+        "response": full_response,
+        "code": code,
+        "duration_ms": duration_ms,
+    }
+
+    return code, trace
+
+
+# =============================================================================
 # STAGE PARSING: Extract structured reasoning stages from TCoT response
 # =============================================================================
 
@@ -369,10 +547,18 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
     # Load data
     load_limit = None  # Load all first, then filter
     print(f"\nLoading data (source={source}, offset={offset}, limit={limit}, qtype={qtype})...")
+
+    # Determine if we need Visualization samples
+    include_viz = False
+    if qtype:
+        qtype_upper = qtype.upper() if len(qtype) <= 3 else qtype
+        if qtype_upper in ("VIZ", "Visualization"):
+            include_viz = True
+
     if source == "sample":
         samples = load_sample_data()
     else:
-        samples = load_tablebench(source=source, limit=None)  # Load all
+        samples = load_tablebench(source=source, limit=None, include_viz=include_viz)
 
     # Filter by question type if specified
     if qtype:
@@ -404,64 +590,153 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
 
     for i, sample in enumerate(samples):
         qid = sample["id"]
-        qtype = sample["qtype"]
+        sample_qtype = sample["qtype"]
         qsubtype = sample["qsubtype"]
         question = sample["question"]
         table = sample["table"]
         ground_truth = sample["answer"]
         instruction = sample.get("instruction", "")  # Official DP instruction
 
-        print(f"\n[{i+1}/{len(samples)}] {qtype}/{qsubtype} | ID: {qid}")
+        print(f"\n[{i+1}/{len(samples)}] {sample_qtype}/{qsubtype} | ID: {qid}")
         print(f"    Q: {question[:70]}..." if len(question) > 70 else f"    Q: {question}")
         print(f"    GT: {ground_truth}")
 
-        # Baseline - use official instruction
-        baseline_trace = None
-        try:
-            pred_baseline, baseline_trace = ask_baseline(
-                question, table, instruction=instruction, model=model
-            )
-            correct_baseline = evaluate_sample(pred_baseline, ground_truth, qtype, qsubtype)
-            status = "✓" if correct_baseline >= 1.0 else "✗"
-            print(f"    [Baseline Result] {pred_baseline} {status}")
-        except Exception as e:
-            pred_baseline = ""
-            correct_baseline = 0.0
-            print(f"    [Baseline] ERROR - {e}")
+        # Handle Visualization separately
+        if sample_qtype == "Visualization":
+            # For Visualization: generate code, execute, and compare chart data
+            baseline_trace = None
+            skill_trace = None
+            pred_data = []
+            ref_data = []
+            code = ""
 
-        results_baseline.append({
-            "id": qid,
-            "qtype": qtype,
-            "qsubtype": qsubtype,
-            "question": question,
-            "ground_truth": ground_truth,
-            "prediction": pred_baseline,
-            "score": correct_baseline,  # Float score (0.0 to 1.0)
-            "trace": baseline_trace,
-        })
+            try:
+                # Generate visualization code
+                code, viz_trace = ask_visualization(question, table, model=model, verbose=True)
 
-        # With skill
-        skill_trace = None
-        try:
-            pred_skill, skill_trace = ask_with_skill(question, table, skill_prompt, model)
-            correct_skill = evaluate_sample(pred_skill, ground_truth, qtype, qsubtype)
-            status = "✓" if correct_skill >= 1.0 else "✗"
-            print(f"    [Skill Result] {pred_skill} {status}")
-        except Exception as e:
-            pred_skill = ""
-            correct_skill = 0.0
-            print(f"    [Skill] ERROR - {e}")
+                if code:
+                    # Execute code and extract chart data
+                    success, pred_data, error = execute_chart_code(code)
 
-        results_skill.append({
-            "id": qid,
-            "qtype": qtype,
-            "qsubtype": qsubtype,
-            "question": question,
-            "ground_truth": ground_truth,
-            "prediction": pred_skill,
-            "score": correct_skill,  # Float score (0.0 to 1.0)
-            "trace": skill_trace,
-        })
+                    # Parse reference data from ground_truth (expected to be JSON list or chart values)
+                    try:
+                        if ground_truth.startswith('['):
+                            ref_data = json.loads(ground_truth)
+                        else:
+                            # Try to parse as comma-separated numbers
+                            ref_data = [float(x.strip()) for x in ground_truth.split(',') if x.strip()]
+                    except (json.JSONDecodeError, ValueError):
+                        ref_data = []
+
+                    if success and pred_data and ref_data:
+                        # Compare chart data (Pass@1)
+                        is_correct = compare_chart_data(pred_data, ref_data)
+                        correct_baseline = 1.0 if is_correct else 0.0
+                        status = "✓" if is_correct else "✗"
+                        print(f"    [VIZ Execute] Success - Pred: {pred_data[:3]}... Ref: {ref_data[:3]}... {status}")
+                    elif success:
+                        correct_baseline = 0.0
+                        print(f"    [VIZ Execute] Code ran but data extraction failed")
+                        print(f"        Pred data: {pred_data}")
+                        print(f"        Ref data: {ref_data}")
+                    else:
+                        correct_baseline = 0.0
+                        print(f"    [VIZ Execute] Failed - {error}")
+
+                    baseline_trace = {
+                        "code": code,
+                        "success": success,
+                        "pred_data": pred_data,
+                        "ref_data": ref_data,
+                        "error": error,
+                        **viz_trace
+                    }
+                else:
+                    correct_baseline = 0.0
+                    print(f"    [VIZ] No code generated")
+                    baseline_trace = viz_trace
+
+            except Exception as e:
+                correct_baseline = 0.0
+                print(f"    [VIZ] ERROR - {e}")
+                traceback.print_exc()
+                baseline_trace = {"error": str(e)}
+
+            # For Visualization, skill uses the same approach (no separate skill method for now)
+            correct_skill = correct_baseline
+            skill_trace = baseline_trace
+
+            results_baseline.append({
+                "id": qid,
+                "qtype": sample_qtype,
+                "qsubtype": qsubtype,
+                "question": question,
+                "ground_truth": ground_truth,
+                "prediction": str(pred_data) if pred_data else "",
+                "score": correct_baseline,
+                "trace": baseline_trace,
+            })
+
+            results_skill.append({
+                "id": qid,
+                "qtype": sample_qtype,
+                "qsubtype": qsubtype,
+                "question": question,
+                "ground_truth": ground_truth,
+                "prediction": str(pred_data) if pred_data else "",
+                "score": correct_skill,
+                "trace": skill_trace,
+            })
+
+        else:
+            # Non-Visualization: standard QA approach
+            # Baseline - use official instruction
+            baseline_trace = None
+            try:
+                pred_baseline, baseline_trace = ask_baseline(
+                    question, table, instruction=instruction, model=model
+                )
+                correct_baseline = evaluate_sample(pred_baseline, ground_truth, sample_qtype, qsubtype)
+                status = "✓" if correct_baseline >= 1.0 else "✗"
+                print(f"    [Baseline Result] {pred_baseline} {status}")
+            except Exception as e:
+                pred_baseline = ""
+                correct_baseline = 0.0
+                print(f"    [Baseline] ERROR - {e}")
+
+            results_baseline.append({
+                "id": qid,
+                "qtype": sample_qtype,
+                "qsubtype": qsubtype,
+                "question": question,
+                "ground_truth": ground_truth,
+                "prediction": pred_baseline,
+                "score": correct_baseline,  # Float score (0.0 to 1.0)
+                "trace": baseline_trace,
+            })
+
+            # With skill
+            skill_trace = None
+            try:
+                pred_skill, skill_trace = ask_with_skill(question, table, skill_prompt, model)
+                correct_skill = evaluate_sample(pred_skill, ground_truth, sample_qtype, qsubtype)
+                status = "✓" if correct_skill >= 1.0 else "✗"
+                print(f"    [Skill Result] {pred_skill} {status}")
+            except Exception as e:
+                pred_skill = ""
+                correct_skill = 0.0
+                print(f"    [Skill] ERROR - {e}")
+
+            results_skill.append({
+                "id": qid,
+                "qtype": sample_qtype,
+                "qsubtype": qsubtype,
+                "question": question,
+                "ground_truth": ground_truth,
+                "prediction": pred_skill,
+                "score": correct_skill,  # Float score (0.0 to 1.0)
+                "trace": skill_trace,
+            })
 
     # Evaluate
     eval_baseline = evaluate_batch(results_baseline)

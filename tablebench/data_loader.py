@@ -58,8 +58,13 @@ def load_from_json(file_path: str, limit: Optional[int] = None) -> list[dict]:
     return samples
 
 
-def load_from_huggingface(limit: Optional[int] = None) -> list[dict]:
-    """Load from HuggingFace datasets."""
+def load_from_huggingface(limit: Optional[int] = None, include_viz: bool = False) -> list[dict]:
+    """Load from HuggingFace datasets.
+
+    Args:
+        limit: Optional limit on number of samples
+        include_viz: Whether to include Visualization samples (default: False)
+    """
     from datasets import load_dataset
 
     # Load TQA_test split specifically (Direct Prompting format)
@@ -82,7 +87,8 @@ def load_from_huggingface(limit: Optional[int] = None) -> list[dict]:
     for i, item in enumerate(dataset):
         if limit and len(samples) >= limit:
             break
-        if item.get("qtype") == "Visualization":
+        # Skip Visualization unless explicitly included
+        if item.get("qtype") == "Visualization" and not include_viz:
             continue
 
         # Handle table format - can be dict or string
@@ -102,19 +108,21 @@ def load_from_huggingface(limit: Optional[int] = None) -> list[dict]:
     return samples
 
 
-def load_tablebench(source: str = "huggingface", limit: Optional[int] = None) -> list[dict]:
+def load_tablebench(source: str = "huggingface", limit: Optional[int] = None,
+                    include_viz: bool = False) -> list[dict]:
     """
     Load TableBench dataset.
 
     Args:
         source: "huggingface" or path to local file (.json or .jsonl)
         limit: Optional limit on number of samples
+        include_viz: Whether to include Visualization samples (default: False)
 
     Returns:
         List of samples with keys: id, qtype, qsubtype, table, question, answer
     """
     if source == "huggingface":
-        return load_from_huggingface(limit)
+        return load_from_huggingface(limit, include_viz=include_viz)
     elif source.endswith('.jsonl'):
         return load_from_jsonl(source, limit)
     elif source.endswith('.json'):
