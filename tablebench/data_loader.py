@@ -59,7 +59,22 @@ def load_from_json(file_path: str, limit: Optional[int] = None) -> list[dict]:
 def load_from_huggingface(limit: Optional[int] = None) -> list[dict]:
     """Load from HuggingFace datasets."""
     from datasets import load_dataset
-    dataset = load_dataset("Multilingual-Multimodal-NLP/TableBench", split="test")
+
+    # Load TQA_test split specifically (Direct Prompting format)
+    # The dataset has multiple configs with different columns, so we load just one
+    try:
+        dataset = load_dataset(
+            "Multilingual-Multimodal-NLP/TableBench",
+            data_files="TableBench_DP.jsonl",
+            split="train"
+        )
+    except Exception:
+        # Fallback: try loading with name parameter
+        dataset = load_dataset(
+            "Multilingual-Multimodal-NLP/TableBench",
+            name="TQA",
+            split="test"
+        )
 
     samples = []
     for i, item in enumerate(dataset):
@@ -67,11 +82,17 @@ def load_from_huggingface(limit: Optional[int] = None) -> list[dict]:
             break
         if item.get("qtype") == "Visualization":
             continue
+
+        # Handle table format - can be dict or string
+        table = item.get("table", "")
+        if isinstance(table, dict):
+            table = json.dumps(table)
+
         samples.append({
-            "id": item.get("id", i),
+            "id": item.get("id", str(i)),
             "qtype": item.get("qtype", ""),
             "qsubtype": item.get("qsubtype", ""),
-            "table": item.get("table", ""),
+            "table": table,
             "question": item.get("question", ""),
             "answer": item.get("answer", ""),
         })
