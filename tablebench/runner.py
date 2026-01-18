@@ -128,19 +128,20 @@ def ask_baseline(question: str, table: str, instruction: str = "",
         prompt = instruction
     else:
         # Fallback prompt matching official TableBench DP format
+        # DP = Direct Prompting, expects direct answer without reasoning
         prompt = f"""You are a table analyst. Your task is to answer questions based on the table content.
 
-The answer should follow the format below:
+The answer should follow the format below as the last line of your response:
 Final Answer: AnswerName1, AnswerName2...
 
-Ensure the final answer format is correct. The answer should be a number or entity name, as short as possible, WITHOUT any explanation.
-
-Let's think step by step and then give the final answer to the question.
+Ensure the final answer format is the last line. The answer should be a number or entity names, as short as possible.
 
 Read the table below in JSON format:
 {table}
 
-Question: {question}"""
+Question: {question}
+
+Analyze the table and give the final answer."""
 
     if verbose:
         print(f"      [Baseline] LLM...", end="", flush=True)
