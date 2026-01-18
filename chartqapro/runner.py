@@ -326,6 +326,7 @@ Now analyze the chart:"""
 # =============================================================================
 
 def run_benchmark(limit: int = None,
+                  offset: int = 0,
                   question_types: list = None,
                   model: str = "claude-sonnet-4-5-20250929",
                   use_sample: bool = False,
@@ -339,11 +340,22 @@ def run_benchmark(limit: int = None,
     print("\nSkill: Chain-of-Thought (CoT) reasoning")
 
     # Load data
-    print(f"\nLoading data (limit={limit})...")
+    load_limit = (offset + limit) if limit else None
+    print(f"\nLoading data (offset={offset}, limit={limit})...")
     if use_sample:
         samples = load_sample_data()
     else:
-        samples = load_chartqapro(limit=limit, question_types=question_types)
+        samples = load_chartqapro(limit=load_limit, question_types=question_types)
+
+    # Apply offset
+    if offset > 0:
+        samples = samples[offset:]
+        print(f"Skipped first {offset} samples")
+
+    # Apply limit after offset
+    if limit and len(samples) > limit:
+        samples = samples[:limit]
+
     print(f"Loaded {len(samples)} samples")
 
     # Show question type distribution
@@ -516,6 +528,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ChartQAPro Skill Benchmark")
     parser.add_argument("--limit", type=int, default=None,
                         help="Number of samples (default: all)")
+    parser.add_argument("--offset", type=int, default=0,
+                        help="Skip first N samples")
     parser.add_argument("--type", type=str, action="append", dest="types",
                         help="Filter by question type (can specify multiple)")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929")
@@ -527,6 +541,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     run_benchmark(
         limit=args.limit,
+        offset=args.offset,
         question_types=args.types,
         model=args.model,
         use_sample=args.sample,
