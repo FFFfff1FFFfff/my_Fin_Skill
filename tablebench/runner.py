@@ -127,18 +127,20 @@ def ask_baseline(question: str, table: str, instruction: str = "",
     if instruction:
         prompt = instruction
     else:
+        # Fallback prompt matching official TableBench DP format
         prompt = f"""You are a table analyst. Your task is to answer questions based on the table content.
 
 The answer should follow the format below:
 Final Answer: AnswerName1, AnswerName2...
-Answer should be a number or entity name, as short as possible, without any explanation.
 
-[TABLE]
+Ensure the final answer format is correct. The answer should be a number or entity name, as short as possible, WITHOUT any explanation.
+
+Let's think step by step and then give the final answer to the question.
+
+Read the table below in JSON format:
 {table}
 
-Question: {question}
-
-Give the final answer to the question directly without any explanation."""
+Question: {question}"""
 
     if verbose:
         print(f"      [Baseline] LLM...", end="", flush=True)
@@ -146,7 +148,7 @@ Give the final answer to the question directly without any explanation."""
     start_time = time.time()
     response = client.messages.create(
         model=model,
-        max_tokens=100,
+        max_tokens=1024,  # Increased for reasoning
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
