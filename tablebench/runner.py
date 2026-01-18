@@ -272,30 +272,41 @@ def ask_with_skill(question: str, table: str, skill_prompt: str,
                    verbose: bool = True) -> tuple:
     """
     With skill: PoT (Program of Thought) - generate and execute Python code.
+    Falls back to baseline if code execution fails.
 
     Returns:
         tuple: (extracted_answer, trace_dict)
     """
-    # PoT prompt - ask model to write Python code
-    user_prompt = f"""You are a table analyst. Answer the question by writing Python code.
+    # PoT prompt - clear template with data type conversion emphasis
+    user_prompt = f"""Answer the question by writing Python code.
 
-**CRITICAL - Precision Requirements:**
-- Maintain FULL numerical precision - do NOT round
-- If the data shows 51.44, your answer must be 51.44 (not 51.4)
-- If the data shows 115.7, your answer must be 115.7 (not 1157)
-- Use pandas for accurate calculations
+**IMPORTANT RULES:**
+1. Your code MUST be inside a ```python``` code block
+2. MUST end with: print(f"Final Answer: {{result}}")
+3. Convert columns to numeric: df['col'] = pd.to_numeric(df['col'], errors='coerce')
+4. Do NOT round - keep full precision
 
-Write Python code that:
-1. Parses the JSON table into a pandas DataFrame
-2. Performs the required calculations with full precision
-3. Prints the result as: print(f"Final Answer: {{result}}")
+**Code Template:**
+```python
+import pandas as pd
+import json
 
-Read the table below in JSON format:
-{table}
+table_data = json.loads('''{table}''')
+df = pd.DataFrame(table_data['data'], columns=table_data['columns'])
+
+# Convert numeric columns (IMPORTANT - avoid string concatenation)
+for col in df.columns:
+    df[col] = pd.to_numeric(df[col], errors='ignore')
+
+# Your calculation here
+result = ...
+
+print(f"Final Answer: {{result}}")
+```
 
 Question: {question}
 
-Write the Python code:"""
+Write the Python code inside ```python``` block:"""
 
     if verbose:
         print(f"      [Skill/PoT] LLM...", end="", flush=True)
@@ -322,28 +333,65 @@ Write the Python code:"""
     exec_duration_ms = int((time.time() - exec_start) * 1000)
 
     # Step 4: Extract answer
+    extracted = ""
+    used_fallback = False
+
     if success and output:
         extracted = extract_answer_from_output(output)
+        # Validate: check if extracted looks reasonable
+        if not extracted or extracted == "nan" or "Error" in extracted:
+            success = False
+
+    if not success or not extracted:
+        # FALLBACK: Use baseline direct prompting
+        used_fallback = True
+        if verbose:
+            print(f" {len(full_response)}c {llm_duration_ms}ms")
+            print(f"        → Code: {'Found' if code else 'NOT FOUND'}")
+            print(f"        → Exec: FAILED - {error[:40] if error else 'No output'}")
+            print(f"        → Fallback to baseline...", end="", flush=True)
+
+        # Call baseline
+        fallback_start = time.time()
+        fallback_prompt = f"""You are a table analyst. Answer this question directly.
+
+Read the table in JSON format:
+{table}
+
+Question: {question}
+
+Think step by step, then give your answer as:
+Final Answer: [your answer]
+
+The answer should be a number or short text, with full precision (no rounding)."""
+
+        fallback_response = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            temperature=0,
+            messages=[{"role": "user", "content": fallback_prompt}]
+        )
+        fallback_duration_ms = int((time.time() - fallback_start) * 1000)
+        fallback_text = fallback_response.content[0].text.strip()
+        extracted = extract_answer(fallback_text)
+
+        if verbose:
+            print(f" {fallback_duration_ms}ms -> \"{extracted}\"")
+
+        total_duration_ms = llm_duration_ms + exec_duration_ms + fallback_duration_ms
     else:
-        # Fallback: try to extract answer from LLM response directly
-        extracted = extract_answer(full_response)
-
-    total_duration_ms = llm_duration_ms + exec_duration_ms
-
-    if verbose:
-        print(f" {len(full_response)}c {total_duration_ms}ms")
-        if code:
-            code_preview = code.split('\n')[0][:50] + "..." if len(code) > 50 else code.split('\n')[0]
-            print(f"        → Code: {code_preview}")
-        if success:
+        total_duration_ms = llm_duration_ms + exec_duration_ms
+        if verbose:
+            print(f" {len(full_response)}c {total_duration_ms}ms")
+            if code:
+                code_preview = code.split('\n')[0][:50] + "..." if len(code) > 50 else code.split('\n')[0]
+                print(f"        → Code: {code_preview}")
             print(f"        → Exec: OK ({exec_duration_ms}ms)")
-        else:
-            print(f"        → Exec: FAILED - {error[:50]}")
-        print(f"        → Final: {extracted}")
+            print(f"        → Final: {extracted}")
 
     trace = {
-        "prompt": user_prompt,
-        "system_prompt": skill_prompt[:500] + "..." if len(skill_prompt) > 500 else skill_prompt,
+        "prompt": user_prompt[:500] + "...",
+        "system_prompt": skill_prompt[:300] + "..." if len(skill_prompt) > 300 else skill_prompt,
         "response": full_response,
         "code": code,
         "execution": {
@@ -352,6 +400,7 @@ Write the Python code:"""
             "error": error,
             "duration_ms": exec_duration_ms,
         },
+        "used_fallback": used_fallback,
         "extracted_answer": extracted,
         "llm_duration_ms": llm_duration_ms,
         "total_duration_ms": total_duration_ms,

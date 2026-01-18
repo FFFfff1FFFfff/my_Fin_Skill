@@ -3,70 +3,76 @@ description	PoT (Program of Thought) for table question answering - generates Py
 
 # Table Reasoning - PoT Method
 
-You are a table analyst. Your task is to answer questions based on the table content by writing Python code.
+You are a table analyst. Answer questions by writing Python code that will be executed.
 
-## Critical: Precision Requirements
+## MANDATORY Code Format
 
-**IMPORTANT**: Maintain full numerical precision throughout calculations:
-- Do NOT round intermediate results
-- Do NOT truncate decimal places
-- Keep the EXACT precision shown in the source data
-- If the answer is 51.44, output 51.44 (not 51.4)
-- If the answer is 115.7, output 115.7 (not 1157)
-
-## Method: Program of Thought (PoT)
-
-Instead of calculating mentally, write Python code to compute the answer precisely.
-
-### Code Template
+Your response MUST contain a Python code block like this:
 
 ```python
 import pandas as pd
 import json
 
 # Parse the table
-table_data = json.loads('''TABLE_JSON_HERE''')
+table_data = json.loads('''TABLE_JSON''')
 df = pd.DataFrame(table_data['data'], columns=table_data['columns'])
 
-# Your calculation logic here
-# ...
+# IMPORTANT: Convert string columns to numeric if needed
+# df['column_name'] = pd.to_numeric(df['column_name'], errors='coerce')
 
-# Print the final answer with full precision
+# Your calculation here
+result = ...
+
+# MUST end with this exact format
 print(f"Final Answer: {result}")
 ```
 
-### Guidelines
+## Critical Requirements
 
-1. **Parse table correctly**: Use pandas DataFrame for structured operations
-2. **Handle data types**: Convert strings to numbers when needed
-3. **Filter precisely**: Use exact column names and values
-4. **Calculate accurately**: Let Python handle all arithmetic
-5. **Preserve precision**: Do not round unless specifically asked
+1. **Always use ```python``` code block** - Your code must be inside triple backticks
+2. **Always end with print(f"Final Answer: {result}")** - This is how the answer is extracted
+3. **Convert data types** - Use `pd.to_numeric()` for numerical columns that might be strings
+4. **Maintain precision** - Do NOT round unless asked. Keep full decimal places.
 
-### Example
+## Common Patterns
 
-Question: What is the average age of all employees?
+### Sum/Total
+```python
+result = df['column'].sum()
+```
+
+### Average/Mean
+```python
+result = df['column'].mean()
+```
+
+### Filtered Aggregation
+```python
+filtered = df[df['condition_col'] == 'value']
+result = filtered['target_col'].sum()
+```
+
+### Count
+```python
+result = len(df[df['column'] > threshold])
+```
+
+## Example
+
+Question: What is the average age?
 
 ```python
 import pandas as pd
 import json
 
-table_data = json.loads('''{"columns": ["Name", "Age"], "data": [["Alice", 30], ["Bob", 25], ["Carol", 28]]}''')
+table_data = json.loads('''{"columns": ["Name", "Age"], "data": [["Alice", "30"], ["Bob", "25"]]}''')
 df = pd.DataFrame(table_data['data'], columns=table_data['columns'])
 
-# Calculate average with full precision
-average_age = df['Age'].mean()
+# Convert Age to numeric (it might be string)
+df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
 
-print(f"Final Answer: {average_age}")
+result = df['Age'].mean()
+print(f"Final Answer: {result}")
 ```
 
-Output: `Final Answer: 27.666666666666668`
-
-## Output Format
-
-Your response must contain a Python code block that:
-1. Parses the JSON table into a pandas DataFrame
-2. Performs the required calculations
-3. Prints the result in the format: `Final Answer: {result}`
-
-The code will be executed and the Final Answer extracted.
+Output: `Final Answer: 27.5`
