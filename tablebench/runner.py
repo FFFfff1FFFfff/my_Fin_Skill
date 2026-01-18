@@ -550,6 +550,9 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
         "Visualization": "Visualization",
     }
 
+    # Special values for qtype
+    SKIP_VIZ = ["NOVIZ", "ALL", "SKIPVIZ"]  # These skip VIZ and test others
+
     print("=" * 70)
     print("TableBench Skill Benchmark")
     print("=" * 70)
@@ -560,10 +563,14 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
 
     # Determine if we need Visualization samples
     include_viz = False
+    skip_viz_mode = False
     if qtype:
-        qtype_upper = qtype.upper() if len(qtype) <= 3 else qtype
+        qtype_upper = qtype.upper() if len(qtype) <= 5 else qtype
         if qtype_upper in ("VIZ", "Visualization"):
             include_viz = True
+        elif qtype_upper in SKIP_VIZ:
+            skip_viz_mode = True
+            include_viz = False  # Don't load VIZ
 
     if source == "sample":
         samples = load_sample_data()
@@ -571,10 +578,13 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
         samples = load_tablebench(source=source, limit=None, include_viz=include_viz)
 
     # Filter by question type if specified
-    if qtype:
+    if qtype and not skip_viz_mode:
         qtype_full = QTYPE_MAP.get(qtype.upper() if len(qtype) <= 3 else qtype, qtype)
         samples = [s for s in samples if s["qtype"] == qtype_full]
         print(f"Filtered to qtype={qtype_full}: {len(samples)} samples")
+    elif skip_viz_mode:
+        # VIZ already excluded by include_viz=False, just print info
+        print(f"Skip VIZ mode: testing FC, NR, DA ({len(samples)} samples)")
 
     # Apply offset
     if offset > 0:
@@ -867,7 +877,7 @@ if __name__ == "__main__":
     parser.add_argument("--offset", type=int, default=0, help="Skip first N samples")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929", help="Model to use")
     parser.add_argument("--qtype", type=str, default=None,
-                        help="Filter by question type: FC (FactChecking), NR (NumericalReasoning), DA (DataAnalysis), VIZ (Visualization)")
+                        help="Filter by question type: FC, NR, DA, VIZ, or NOVIZ (skip VIZ, test others)")
 
     args = parser.parse_args()
     run_benchmark(source=args.source, limit=args.limit, offset=args.offset,
