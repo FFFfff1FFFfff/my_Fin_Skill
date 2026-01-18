@@ -8,6 +8,10 @@ import os
 import sys
 import re
 import time
+import io
+import signal
+import traceback
+from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 
 # Add parent directory to path for imports
@@ -19,6 +23,97 @@ from evaluator import evaluate_sample, evaluate_batch
 from skill_system import SkillManager
 
 client = Anthropic()
+
+
+# =============================================================================
+# POT (Program of Thought): Code extraction and execution
+# =============================================================================
+
+def extract_python_code(text: str) -> str:
+    """Extract Python code block from LLM response."""
+    # Try to find ```python ... ``` block
+    match = re.search(r'```python\s*(.*?)```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+
+    # Try to find ``` ... ``` block
+    match = re.search(r'```\s*(.*?)```', text, re.DOTALL)
+    if match:
+        code = match.group(1).strip()
+        # Check if it looks like Python code
+        if 'import' in code or 'print' in code or 'def ' in code:
+            return code
+
+    return ""
+
+
+def execute_code_safely(code: str, timeout_seconds: int = 15) -> tuple:
+    """
+    Execute Python code safely with timeout and capture output.
+
+    Returns:
+        tuple: (success: bool, output: str, error: str)
+    """
+    if not code:
+        return False, "", "No code to execute"
+
+    # Capture stdout
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
+    # Timeout handler
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Code execution timed out")
+
+    try:
+        # Set timeout (Unix only)
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_seconds)
+
+        # Execute code with captured output
+        exec_globals = {
+            '__builtins__': __builtins__,
+            'pd': None,
+            'json': json,
+        }
+
+        # Import pandas if available
+        try:
+            import pandas as pd
+            exec_globals['pd'] = pd
+        except ImportError:
+            pass
+
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            exec(code, exec_globals)
+
+        # Cancel timeout
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+        output = stdout_capture.getvalue()
+        error = stderr_capture.getvalue()
+
+        return True, output, error
+
+    except TimeoutError as e:
+        signal.alarm(0)
+        return False, "", str(e)
+    except Exception as e:
+        signal.alarm(0)
+        return False, "", f"{type(e).__name__}: {str(e)}"
+
+
+def extract_answer_from_output(output: str) -> str:
+    """Extract Final Answer from code execution output."""
+    # Look for "Final Answer:" in output
+    match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', output, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    # Fallback: return last non-empty line
+    lines = [l.strip() for l in output.strip().split('\n') if l.strip()]
+    return lines[-1] if lines else ""
 
 
 # =============================================================================
@@ -176,30 +271,36 @@ def ask_with_skill(question: str, table: str, skill_prompt: str,
                    model: str = "claude-sonnet-4-5-20250929",
                    verbose: bool = True) -> tuple:
     """
-    With skill: TCoT (Textual Chain-of-Thought) matching official TableBench format.
+    With skill: PoT (Program of Thought) - generate and execute Python code.
 
     Returns:
         tuple: (extracted_answer, trace_dict)
     """
-    # Official TCoT prompt template from TableBench paper
-    user_prompt = f"""The answer should follow the format below:
-[Answer Format]
-Final Answer: AnswerName1, AnswerName2...
+    # PoT prompt - ask model to write Python code
+    user_prompt = f"""You are a table analyst. Answer the question by writing Python code.
 
-Ensure the final answer format is the last output line and can only be in the "Final Answer: AnswerName1, AnswerName2..." form, no other form. Ensure the "AnswerName" is a number or entity name, as short as possible, without any explanation.
+**CRITICAL - Precision Requirements:**
+- Maintain FULL numerical precision - do NOT round
+- If the data shows 51.44, your answer must be 51.44 (not 51.4)
+- If the data shows 115.7, your answer must be 115.7 (not 1157)
+- Use pandas for accurate calculations
 
-Let's think step by step and then give the final answer to the question.
+Write Python code that:
+1. Parses the JSON table into a pandas DataFrame
+2. Performs the required calculations with full precision
+3. Prints the result as: print(f"Final Answer: {{result}}")
 
 Read the table below in JSON format:
-[TABLE]
 {table}
 
-Let's get start!
-Question: {question}"""
+Question: {question}
+
+Write the Python code:"""
 
     if verbose:
-        print(f"      [Skill] LLM...", end="", flush=True)
+        print(f"      [Skill/PoT] LLM...", end="", flush=True)
 
+    # Step 1: Get code from LLM
     start_time = time.time()
     response = client.messages.create(
         model=model,
@@ -208,32 +309,52 @@ Question: {question}"""
         system=skill_prompt,
         messages=[{"role": "user", "content": user_prompt}]
     )
-    duration_ms = int((time.time() - start_time) * 1000)
+    llm_duration_ms = int((time.time() - start_time) * 1000)
 
     full_response = response.content[0].text.strip()
-    stages = parse_tcot_stages(full_response)
-    extracted = extract_answer(full_response)
+
+    # Step 2: Extract Python code
+    code = extract_python_code(full_response)
+
+    # Step 3: Execute code
+    exec_start = time.time()
+    success, output, error = execute_code_safely(code)
+    exec_duration_ms = int((time.time() - exec_start) * 1000)
+
+    # Step 4: Extract answer
+    if success and output:
+        extracted = extract_answer_from_output(output)
+    else:
+        # Fallback: try to extract answer from LLM response directly
+        extracted = extract_answer(full_response)
+
+    total_duration_ms = llm_duration_ms + exec_duration_ms
 
     if verbose:
-        print(f" {len(full_response)}c {duration_ms}ms")
-        if stages["extract_data"]:
-            print(f"        → Extract: {stages['extract_data'][:60]}...")
-        if stages["calculate"]:
-            print(f"        → Calc: {stages['calculate'][:60]}...")
+        print(f" {len(full_response)}c {total_duration_ms}ms")
+        if code:
+            code_preview = code.split('\n')[0][:50] + "..." if len(code) > 50 else code.split('\n')[0]
+            print(f"        → Code: {code_preview}")
+        if success:
+            print(f"        → Exec: OK ({exec_duration_ms}ms)")
+        else:
+            print(f"        → Exec: FAILED - {error[:50]}")
         print(f"        → Final: {extracted}")
 
     trace = {
         "prompt": user_prompt,
         "system_prompt": skill_prompt[:500] + "..." if len(skill_prompt) > 500 else skill_prompt,
         "response": full_response,
-        "stages": {
-            "parse_table": stages["parse_table"],
-            "understand_question": stages["understand_question"],
-            "extract_data": stages["extract_data"],
-            "calculate": stages["calculate"],
+        "code": code,
+        "execution": {
+            "success": success,
+            "output": output,
+            "error": error,
+            "duration_ms": exec_duration_ms,
         },
         "extracted_answer": extracted,
-        "duration_ms": duration_ms,
+        "llm_duration_ms": llm_duration_ms,
+        "total_duration_ms": total_duration_ms,
         "response_length": len(full_response),
     }
 
