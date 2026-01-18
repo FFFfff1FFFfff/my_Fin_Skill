@@ -176,20 +176,26 @@ def ask_with_skill(question: str, table: str, skill_prompt: str,
                    model: str = "claude-sonnet-4-5-20250929",
                    verbose: bool = True) -> tuple:
     """
-    With skill: TCoT-style reasoning with skill-enhanced system prompt.
+    With skill: TCoT (Textual Chain-of-Thought) matching official TableBench format.
 
     Returns:
         tuple: (extracted_answer, trace_dict)
     """
-    user_prompt = f"""[TABLE]
+    # Official TCoT prompt template from TableBench paper
+    user_prompt = f"""The answer should follow the format below:
+[Answer Format]
+Final Answer: AnswerName1, AnswerName2...
+
+Ensure the final answer format is the last output line and can only be in the "Final Answer: AnswerName1, AnswerName2..." form, no other form. Ensure the "AnswerName" is a number or entity name, as short as possible, without any explanation.
+
+Let's think step by step and then give the final answer to the question.
+
+Read the table below in JSON format:
+[TABLE]
 {table}
 
-Question: {question}
-
-Follow the reasoning framework above. Show your step-by-step reasoning, then end with:
-Final Answer: [your answer]
-
-The answer should be a number or entity name, as short as possible."""
+Let's get start!
+Question: {question}"""
 
     if verbose:
         print(f"      [Skill] LLM...", end="", flush=True)
