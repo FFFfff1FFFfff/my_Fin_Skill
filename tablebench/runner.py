@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import re
+import time
 from datetime import datetime
 
 # Add parent directory to path for imports
@@ -18,6 +19,60 @@ from evaluator import evaluate_sample, evaluate_batch
 from skill_system import SkillManager
 
 client = Anthropic()
+
+
+# =============================================================================
+# STAGE PARSING: Extract structured reasoning stages from TCoT response
+# =============================================================================
+
+def parse_tcot_stages(response_text: str) -> dict:
+    """
+    Parse TCoT (Table Chain-of-Thought) response to extract reasoning stages.
+
+    Expected stages based on skill:
+    - STEP 1: Parse the Table
+    - STEP 2: Understand the Question
+    - STEP 3: Extract Data
+    - STEP 4: Calculate
+    - STEP 5: Format Answer / Final Answer
+    """
+    stages = {
+        "parse_table": None,
+        "understand_question": None,
+        "extract_data": None,
+        "calculate": None,
+        "final_answer": None,
+        "raw": response_text,
+    }
+
+    # Try to extract numbered steps
+    step_patterns = {
+        "parse_table": r'(?:STEP\s*1|Step\s*1|1\.|Parse|Table Structure)[:\s]*(.+?)(?=STEP\s*2|Step\s*2|2\.|Understand|Question|$)',
+        "understand_question": r'(?:STEP\s*2|Step\s*2|2\.|Understand|Question Type)[:\s]*(.+?)(?=STEP\s*3|Step\s*3|3\.|Extract|Data|$)',
+        "extract_data": r'(?:STEP\s*3|Step\s*3|3\.|Extract|Data Point)[:\s]*(.+?)(?=STEP\s*4|Step\s*4|4\.|Calculate|Calculation|$)',
+        "calculate": r'(?:STEP\s*4|Step\s*4|4\.|Calculate|Calculation)[:\s]*(.+?)(?=STEP\s*5|Step\s*5|5\.|Final|Answer|Format|$)',
+    }
+
+    for stage, pattern in step_patterns.items():
+        match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+        if match:
+            content = match.group(1).strip()
+            if content and len(content) > 5:  # Filter out very short matches
+                stages[stage] = content[:200]  # Limit length for display
+
+    # Extract final answer
+    answer_patterns = [
+        r'Final Answer:\s*(.+?)(?:\n|$)',
+        r'Answer:\s*(.+?)(?:\n|$)',
+        r'\*\*(.+?)\*\*\s*$',
+    ]
+    for pattern in answer_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            stages["final_answer"] = match.group(1).strip()
+            break
+
+    return stages
 
 
 def extract_answer(text: str) -> str:
@@ -52,8 +107,14 @@ def extract_answer(text: str) -> str:
     return lines[-1] if lines else text.strip()
 
 
-def ask_baseline(question: str, table: str, model: str = "claude-sonnet-4-5-20250929") -> str:
-    """Baseline: Direct Prompting (DP) matching official TableBench format."""
+def ask_baseline(question: str, table: str, model: str = "claude-sonnet-4-5-20250929",
+                 verbose: bool = True) -> tuple:
+    """
+    Baseline: Direct Prompting (DP) matching official TableBench format.
+
+    Returns:
+        tuple: (extracted_answer, trace_dict)
+    """
     prompt = f"""You are a table analyst. Your task is to answer questions based on the table content.
 
 The answer should follow the format below:
@@ -67,22 +128,43 @@ Question: {question}
 
 Give the final answer to the question directly without any explanation."""
 
+    if verbose:
+        print(f"      [Baseline] LLM...", end="", flush=True)
+
+    start_time = time.time()
     response = client.messages.create(
         model=model,
         max_tokens=100,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
+    duration_ms = int((time.time() - start_time) * 1000)
+
     raw_answer = response.content[0].text.strip()
-    return extract_answer(raw_answer)
+    extracted = extract_answer(raw_answer)
+
+    if verbose:
+        print(f" {len(raw_answer)}c {duration_ms}ms -> \"{extracted}\"")
+
+    trace = {
+        "prompt": prompt,
+        "response": raw_answer,
+        "extracted_answer": extracted,
+        "duration_ms": duration_ms,
+        "response_length": len(raw_answer),
+    }
+
+    return extracted, trace
 
 
 def ask_with_skill(question: str, table: str, skill_prompt: str,
-                   model: str = "claude-sonnet-4-5-20250929") -> tuple[str, str]:
-    """With skill: TCoT-style reasoning with skill-enhanced system prompt.
+                   model: str = "claude-sonnet-4-5-20250929",
+                   verbose: bool = True) -> tuple:
+    """
+    With skill: TCoT-style reasoning with skill-enhanced system prompt.
 
     Returns:
-        tuple: (full_response, extracted_answer)
+        tuple: (extracted_answer, trace_dict)
     """
     user_prompt = f"""[TABLE]
 {table}
@@ -94,6 +176,10 @@ Final Answer: [your answer]
 
 The answer should be a number or entity name, as short as possible."""
 
+    if verbose:
+        print(f"      [Skill] LLM...", end="", flush=True)
+
+    start_time = time.time()
     response = client.messages.create(
         model=model,
         max_tokens=1024,
@@ -101,19 +187,47 @@ The answer should be a number or entity name, as short as possible."""
         system=skill_prompt,
         messages=[{"role": "user", "content": user_prompt}]
     )
+    duration_ms = int((time.time() - start_time) * 1000)
 
     full_response = response.content[0].text.strip()
+    stages = parse_tcot_stages(full_response)
     extracted = extract_answer(full_response)
-    return full_response, extracted
+
+    if verbose:
+        print(f" {len(full_response)}c {duration_ms}ms")
+        if stages["extract_data"]:
+            print(f"        → Extract: {stages['extract_data'][:60]}...")
+        if stages["calculate"]:
+            print(f"        → Calc: {stages['calculate'][:60]}...")
+        print(f"        → Final: {extracted}")
+
+    trace = {
+        "prompt": user_prompt,
+        "system_prompt": skill_prompt[:500] + "..." if len(skill_prompt) > 500 else skill_prompt,
+        "response": full_response,
+        "stages": {
+            "parse_table": stages["parse_table"],
+            "understand_question": stages["understand_question"],
+            "extract_data": stages["extract_data"],
+            "calculate": stages["calculate"],
+        },
+        "extracted_answer": extracted,
+        "duration_ms": duration_ms,
+        "response_length": len(full_response),
+    }
+
+    return extracted, trace
 
 
-def run_benchmark(source: str = "sample", limit: int = None, model: str = "claude-sonnet-4-5-20250929"):
+def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
+                  model: str = "claude-sonnet-4-5-20250929"):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
 
     Args:
         source: "sample", "huggingface", or path to local file
         limit: Number of samples to test
+        offset: Skip first N samples
         model: Model to use
     """
     print("=" * 70)
@@ -121,11 +235,22 @@ def run_benchmark(source: str = "sample", limit: int = None, model: str = "claud
     print("=" * 70)
 
     # Load data
-    print(f"\nLoading data (source={source}, limit={limit})...")
+    load_limit = (offset + limit) if limit else None
+    print(f"\nLoading data (source={source}, offset={offset}, limit={limit})...")
     if source == "sample":
         samples = load_sample_data()
     else:
-        samples = load_tablebench(source=source, limit=limit)
+        samples = load_tablebench(source=source, limit=load_limit)
+
+    # Apply offset
+    if offset > 0:
+        samples = samples[offset:]
+        print(f"Skipped first {offset} samples")
+
+    # Apply limit after offset
+    if limit and len(samples) > limit:
+        samples = samples[:limit]
+
     print(f"Loaded {len(samples)} samples (excluding Visualization)")
 
     # Load skill
@@ -147,19 +272,21 @@ def run_benchmark(source: str = "sample", limit: int = None, model: str = "claud
         table = sample["table"]
         ground_truth = sample["answer"]
 
-        print(f"\n[{i+1}/{len(samples)}] {qtype}/{qsubtype}")
-        print(f"Q: {question[:60]}...")
-        print(f"GT: {ground_truth}")
+        print(f"\n[{i+1}/{len(samples)}] {qtype}/{qsubtype} | ID: {qid}")
+        print(f"    Q: {question[:70]}..." if len(question) > 70 else f"    Q: {question}")
+        print(f"    GT: {ground_truth}")
 
         # Baseline
+        baseline_trace = None
         try:
-            pred_baseline = ask_baseline(question, table, model)
+            pred_baseline, baseline_trace = ask_baseline(question, table, model)
             correct_baseline = evaluate_sample(pred_baseline, ground_truth, qtype)
-            print(f"Baseline: {pred_baseline} {'✓' if correct_baseline else '✗'}")
+            status = "✓" if correct_baseline else "✗"
+            print(f"    [Baseline Result] {pred_baseline} {status}")
         except Exception as e:
             pred_baseline = ""
             correct_baseline = False
-            print(f"Baseline: ERROR - {e}")
+            print(f"    [Baseline] ERROR - {e}")
 
         results_baseline.append({
             "id": qid,
@@ -168,19 +295,21 @@ def run_benchmark(source: str = "sample", limit: int = None, model: str = "claud
             "question": question,
             "ground_truth": ground_truth,
             "prediction": pred_baseline,
-            "correct": correct_baseline
+            "correct": correct_baseline,
+            "trace": baseline_trace,
         })
 
         # With skill
-        full_response = ""
+        skill_trace = None
         try:
-            full_response, pred_skill = ask_with_skill(question, table, skill_prompt, model)
+            pred_skill, skill_trace = ask_with_skill(question, table, skill_prompt, model)
             correct_skill = evaluate_sample(pred_skill, ground_truth, qtype)
-            print(f"Skill:    {pred_skill} {'✓' if correct_skill else '✗'}")
+            status = "✓" if correct_skill else "✗"
+            print(f"    [Skill Result] {pred_skill} {status}")
         except Exception as e:
             pred_skill = ""
             correct_skill = False
-            print(f"Skill:    ERROR - {e}")
+            print(f"    [Skill] ERROR - {e}")
 
         results_skill.append({
             "id": qid,
@@ -188,9 +317,9 @@ def run_benchmark(source: str = "sample", limit: int = None, model: str = "claud
             "qsubtype": qsubtype,
             "question": question,
             "ground_truth": ground_truth,
-            "full_response": full_response,
             "prediction": pred_skill,
-            "correct": correct_skill
+            "correct": correct_skill,
+            "trace": skill_trace,
         })
 
     # Evaluate
@@ -224,25 +353,54 @@ def run_benchmark(source: str = "sample", limit: int = None, model: str = "claud
         print(f"    With Skill: {skill_detail['correct']}/{skill_detail['total']} ({skill_acc:.1%})")
         print(f"    Improvement: {diff:+.1%}")
 
-    # Save results
+    # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
-        "timestamp": timestamp,
-        "model": model,
-        "source": source,
-        "num_samples": len(samples),
-        "baseline": {
-            "accuracy": acc_base,
-            "eval": eval_baseline,
-            "results": results_baseline
+        "meta": {
+            "timestamp": timestamp,
+            "model": model,
+            "source": source,
+            "offset": offset,
+            "num_samples": len(samples),
         },
-        "skill": {
-            "accuracy": acc_skill,
-            "eval": eval_skill,
-            "results": results_skill
+        "summary": {
+            "baseline": {
+                "accuracy": acc_base,
+                "total_correct": eval_baseline["overall"]["correct"],
+                "total": eval_baseline["overall"]["total"],
+                "by_type": eval_baseline["by_type"],
+            },
+            "skill": {
+                "accuracy": acc_skill,
+                "total_correct": eval_skill["overall"]["correct"],
+                "total": eval_skill["overall"]["total"],
+                "by_type": eval_skill["by_type"],
+            },
+            "improvement": improvement,
         },
-        "improvement": improvement
+        "traces": {
+            "baseline": results_baseline,
+            "skill": results_skill,
+        },
     }
+
+    # Add comparison trace (side-by-side)
+    comparison = []
+    for b, s in zip(results_baseline, results_skill):
+        comparison.append({
+            "id": b["id"],
+            "qtype": b["qtype"],
+            "qsubtype": b["qsubtype"],
+            "question": b["question"][:100] + "..." if len(b["question"]) > 100 else b["question"],
+            "ground_truth": b["ground_truth"],
+            "baseline_pred": b["prediction"],
+            "baseline_correct": b["correct"],
+            "skill_pred": s["prediction"],
+            "skill_correct": s["correct"],
+            "skill_improved": s["correct"] and not b["correct"],
+            "skill_regressed": b["correct"] and not s["correct"],
+        })
+    output["comparison"] = comparison
 
     output_file = f"tablebench_results_{timestamp}.json"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -260,7 +418,8 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=str, default="sample",
                         help="Data source: 'sample', 'huggingface', or path to local file")
     parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N samples")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929", help="Model to use")
 
     args = parser.parse_args()
-    run_benchmark(source=args.source, limit=args.limit, model=args.model)
+    run_benchmark(source=args.source, limit=args.limit, offset=args.offset, model=args.model)
