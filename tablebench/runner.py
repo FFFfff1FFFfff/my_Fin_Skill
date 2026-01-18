@@ -271,20 +271,65 @@ def ask_with_skill(question: str, table: str, skill_prompt: str,
                    model: str = "claude-sonnet-4-5-20250929",
                    verbose: bool = True) -> tuple:
     """
-    With skill: PoT (Program of Thought) - generate and execute Python code.
+    Two-stage PoT (Program of Thought):
+    Stage 1: Analyze table structure and understand the question
+    Stage 2: Write and execute Python code based on the analysis
+
     Falls back to baseline if code execution fails.
 
     Returns:
         tuple: (extracted_answer, trace_dict)
     """
-    # PoT prompt - clear template with data type conversion emphasis
-    user_prompt = f"""Answer the question by writing Python code.
+    # =================================================================
+    # STAGE 1: Table Understanding
+    # =================================================================
+    stage1_prompt = f"""Analyze this table and question. Provide a brief analysis.
+
+TABLE (JSON format):
+{table}
+
+QUESTION: {question}
+
+Analyze and respond with:
+1. **Relevant Columns**: Which columns are needed to answer this question?
+2. **Data Types**: Are there numeric columns stored as strings? (e.g., "100" instead of 100)
+3. **Filter Conditions**: What filtering is needed? (e.g., "industry == 'oil'")
+4. **Calculation**: What calculation is needed? (sum, average, count, etc.)
+5. **Potential Issues**: Any special characters, missing values, or format issues?
+
+Keep your analysis concise (5-10 lines)."""
+
+    if verbose:
+        print(f"      [Skill/2Stage] Stage1...", end="", flush=True)
+
+    # Stage 1: Get table analysis
+    stage1_start = time.time()
+    stage1_response = client.messages.create(
+        model=model,
+        max_tokens=512,
+        temperature=0,
+        messages=[{"role": "user", "content": stage1_prompt}]
+    )
+    stage1_duration_ms = int((time.time() - stage1_start) * 1000)
+    table_analysis = stage1_response.content[0].text.strip()
+
+    if verbose:
+        print(f" {stage1_duration_ms}ms", end="")
+
+    # =================================================================
+    # STAGE 2: Code Generation with Analysis Context
+    # =================================================================
+    stage2_prompt = f"""Based on the table analysis, write Python code to answer the question.
+
+**TABLE ANALYSIS:**
+{table_analysis}
 
 **IMPORTANT RULES:**
 1. Your code MUST be inside a ```python``` code block
 2. MUST end with: print(f"Final Answer: {{result}}")
-3. Convert columns to numeric: df['col'] = pd.to_numeric(df['col'], errors='coerce')
-4. Do NOT round - keep full precision
+3. Convert ALL numeric columns to numeric type before calculations
+4. Handle string values that look like numbers (e.g., "100" -> 100)
+5. Do NOT round - keep full precision
 
 **Code Template:**
 ```python
@@ -294,76 +339,75 @@ import json
 table_data = json.loads('''{table}''')
 df = pd.DataFrame(table_data['data'], columns=table_data['columns'])
 
-# Convert numeric columns (IMPORTANT - avoid string concatenation)
+# Convert numeric columns (based on analysis above)
 for col in df.columns:
     df[col] = pd.to_numeric(df[col], errors='ignore')
 
-# Your calculation here
-result = ...
+# Apply filters and calculations based on analysis
+# ... your code here ...
 
 print(f"Final Answer: {{result}}")
 ```
 
 Question: {question}
 
-Write the Python code inside ```python``` block:"""
+Write the Python code:"""
 
     if verbose:
-        print(f"      [Skill/PoT] LLM...", end="", flush=True)
+        print(f" Stage2...", end="", flush=True)
 
-    # Step 1: Get code from LLM
-    start_time = time.time()
-    response = client.messages.create(
+    # Stage 2: Get code
+    stage2_start = time.time()
+    stage2_response = client.messages.create(
         model=model,
         max_tokens=1024,
         temperature=0,
         system=skill_prompt,
-        messages=[{"role": "user", "content": user_prompt}]
+        messages=[{"role": "user", "content": stage2_prompt}]
     )
-    llm_duration_ms = int((time.time() - start_time) * 1000)
+    stage2_duration_ms = int((time.time() - stage2_start) * 1000)
+    full_response = stage2_response.content[0].text.strip()
 
-    full_response = response.content[0].text.strip()
-
-    # Step 2: Extract Python code
+    # Extract and execute code
     code = extract_python_code(full_response)
 
-    # Step 3: Execute code
     exec_start = time.time()
     success, output, error = execute_code_safely(code)
     exec_duration_ms = int((time.time() - exec_start) * 1000)
 
-    # Step 4: Extract answer
+    # Extract answer
     extracted = ""
     used_fallback = False
 
     if success and output:
         extracted = extract_answer_from_output(output)
-        # Validate: check if extracted looks reasonable
         if not extracted or extracted == "nan" or "Error" in extracted:
             success = False
 
     if not success or not extracted:
-        # FALLBACK: Use baseline direct prompting
+        # FALLBACK: Use baseline direct prompting with analysis context
         used_fallback = True
         if verbose:
-            print(f" {len(full_response)}c {llm_duration_ms}ms")
+            print(f" {stage2_duration_ms}ms")
             print(f"        → Code: {'Found' if code else 'NOT FOUND'}")
             print(f"        → Exec: FAILED - {error[:40] if error else 'No output'}")
-            print(f"        → Fallback to baseline...", end="", flush=True)
+            print(f"        → Fallback...", end="", flush=True)
 
-        # Call baseline
         fallback_start = time.time()
         fallback_prompt = f"""You are a table analyst. Answer this question directly.
 
-Read the table in JSON format:
+**TABLE ANALYSIS (use this to guide your answer):**
+{table_analysis}
+
+**TABLE (JSON):**
 {table}
 
-Question: {question}
+**QUESTION:** {question}
 
-Think step by step, then give your answer as:
+Based on the analysis above, calculate step by step and give your answer as:
 Final Answer: [your answer]
 
-The answer should be a number or short text, with full precision (no rounding)."""
+Keep full precision (no rounding)."""
 
         fallback_response = client.messages.create(
             model=model,
@@ -378,20 +422,22 @@ The answer should be a number or short text, with full precision (no rounding)."
         if verbose:
             print(f" {fallback_duration_ms}ms -> \"{extracted}\"")
 
-        total_duration_ms = llm_duration_ms + exec_duration_ms + fallback_duration_ms
+        total_duration_ms = stage1_duration_ms + stage2_duration_ms + exec_duration_ms + fallback_duration_ms
     else:
-        total_duration_ms = llm_duration_ms + exec_duration_ms
+        total_duration_ms = stage1_duration_ms + stage2_duration_ms + exec_duration_ms
         if verbose:
-            print(f" {len(full_response)}c {total_duration_ms}ms")
+            print(f" {stage2_duration_ms}ms")
             if code:
-                code_preview = code.split('\n')[0][:50] + "..." if len(code) > 50 else code.split('\n')[0]
+                code_preview = code.split('\n')[0][:50] + "..."
                 print(f"        → Code: {code_preview}")
             print(f"        → Exec: OK ({exec_duration_ms}ms)")
             print(f"        → Final: {extracted}")
 
     trace = {
-        "prompt": user_prompt[:500] + "...",
-        "system_prompt": skill_prompt[:300] + "..." if len(skill_prompt) > 300 else skill_prompt,
+        "stage1_prompt": stage1_prompt[:300] + "...",
+        "stage1_analysis": table_analysis,
+        "stage1_duration_ms": stage1_duration_ms,
+        "stage2_prompt": stage2_prompt[:300] + "...",
         "response": full_response,
         "code": code,
         "execution": {
@@ -402,7 +448,6 @@ The answer should be a number or short text, with full precision (no rounding)."
         },
         "used_fallback": used_fallback,
         "extracted_answer": extracted,
-        "llm_duration_ms": llm_duration_ms,
         "total_duration_ms": total_duration_ms,
         "response_length": len(full_response),
     }
