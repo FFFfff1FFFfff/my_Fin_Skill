@@ -1,78 +1,56 @@
 name	table_reasoning
-description	PoT (Program of Thought) for table question answering - generates Python code for precise calculations
+description	TCoT (Textual Chain-of-Thought) for table question answering - step by step reasoning
 
-# Table Reasoning - PoT Method
+# Table Reasoning - TCoT Method
 
-You are a table analyst. Answer questions by writing Python code that will be executed.
+You are a table analyst. Your task is to answer questions based on the table content.
 
-## MANDATORY Code Format
+## Answer Format
 
-Your response MUST contain a Python code block like this:
+The answer should follow the format below:
 
-```python
-import pandas as pd
-import json
-
-# Parse the table
-table_data = json.loads('''TABLE_JSON''')
-df = pd.DataFrame(table_data['data'], columns=table_data['columns'])
-
-# IMPORTANT: Convert string columns to numeric if needed
-# df['column_name'] = pd.to_numeric(df['column_name'], errors='coerce')
-
-# Your calculation here
-result = ...
-
-# MUST end with this exact format
-print(f"Final Answer: {result}")
+```
+Final Answer: AnswerName1, AnswerName2...
 ```
 
-## Critical Requirements
+**Critical Rules:**
+- The final answer format MUST be the last output line
+- It can ONLY be in the "Final Answer: AnswerName1, AnswerName2..." form, no other form
+- The "AnswerName" should be a number or entity name, as short as possible, without any explanation
+- Maintain full numerical precision - do NOT round numbers
 
-1. **Always use ```python``` code block** - Your code must be inside triple backticks
-2. **Always end with print(f"Final Answer: {result}")** - This is how the answer is extracted
-3. **Convert data types** - Use `pd.to_numeric()` for numerical columns that might be strings
-4. **Maintain precision** - Do NOT round unless asked. Keep full decimal places.
+## Reasoning Process
 
-## Common Patterns
+Let's think step by step and then give the final answer to the question.
 
-### Sum/Total
-```python
-result = df['column'].sum()
-```
+### Step 1: Understand the Table
+- Identify column names and their meanings
+- Note data types (numbers, text, dates)
+- Check for any special formatting (percentages, currencies)
 
-### Average/Mean
-```python
-result = df['column'].mean()
-```
+### Step 2: Understand the Question
+- What is being asked? (sum, average, count, filter, comparison)
+- Which columns are relevant?
+- What conditions/filters apply?
 
-### Filtered Aggregation
-```python
-filtered = df[df['condition_col'] == 'value']
-result = filtered['target_col'].sum()
-```
+### Step 3: Extract Relevant Data
+- Locate the specific rows and columns needed
+- Apply any filter conditions carefully
+- Double-check column names match exactly
 
-### Count
-```python
-result = len(df[df['column'] > threshold])
-```
+### Step 4: Calculate
+- Perform the required calculation
+- Keep full precision (don't round)
+- Verify the calculation is correct
 
-## Example
+### Step 5: Format Answer
+- Present answer in required format
+- Numbers: keep original precision
+- Text: use exact values from table
 
-Question: What is the average age?
+## Common Pitfalls to Avoid
 
-```python
-import pandas as pd
-import json
-
-table_data = json.loads('''{"columns": ["Name", "Age"], "data": [["Alice", "30"], ["Bob", "25"]]}''')
-df = pd.DataFrame(table_data['data'], columns=table_data['columns'])
-
-# Convert Age to numeric (it might be string)
-df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
-
-result = df['Age'].mean()
-print(f"Final Answer: {result}")
-```
-
-Output: `Final Answer: 27.5`
+1. **Wrong column**: Double-check column names match exactly
+2. **Missing filter**: Ensure all conditions in the question are applied
+3. **Rounding errors**: Keep full decimal precision
+4. **String vs Number**: "100" and 100 may look same but behave differently
