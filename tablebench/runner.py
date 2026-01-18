@@ -107,15 +107,27 @@ def extract_answer(text: str) -> str:
     return lines[-1] if lines else text.strip()
 
 
-def ask_baseline(question: str, table: str, model: str = "claude-sonnet-4-5-20250929",
+def ask_baseline(question: str, table: str, instruction: str = "",
+                 model: str = "claude-sonnet-4-5-20250929",
                  verbose: bool = True) -> tuple:
     """
-    Baseline: Direct Prompting (DP) matching official TableBench format.
+    Baseline: Direct Prompting (DP) using official TableBench instruction.
+
+    Args:
+        question: The question (for logging only, already in instruction)
+        table: The table (for logging only, already in instruction)
+        instruction: Official instruction from TableBench_DP.jsonl
+        model: Model to use
+        verbose: Whether to print progress
 
     Returns:
         tuple: (extracted_answer, trace_dict)
     """
-    prompt = f"""You are a table analyst. Your task is to answer questions based on the table content.
+    # Use official instruction if provided, otherwise build fallback prompt
+    if instruction:
+        prompt = instruction
+    else:
+        prompt = f"""You are a table analyst. Your task is to answer questions based on the table content.
 
 The answer should follow the format below:
 Final Answer: AnswerName1, AnswerName2...
@@ -147,7 +159,7 @@ Give the final answer to the question directly without any explanation."""
         print(f" {len(raw_answer)}c {duration_ms}ms -> \"{extracted}\"")
 
     trace = {
-        "prompt": prompt,
+        "prompt": prompt[:500] + "..." if len(prompt) > 500 else prompt,
         "response": raw_answer,
         "extracted_answer": extracted,
         "duration_ms": duration_ms,
@@ -271,21 +283,24 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
         question = sample["question"]
         table = sample["table"]
         ground_truth = sample["answer"]
+        instruction = sample.get("instruction", "")  # Official DP instruction
 
         print(f"\n[{i+1}/{len(samples)}] {qtype}/{qsubtype} | ID: {qid}")
         print(f"    Q: {question[:70]}..." if len(question) > 70 else f"    Q: {question}")
         print(f"    GT: {ground_truth}")
 
-        # Baseline
+        # Baseline - use official instruction
         baseline_trace = None
         try:
-            pred_baseline, baseline_trace = ask_baseline(question, table, model)
-            correct_baseline = evaluate_sample(pred_baseline, ground_truth, qtype)
-            status = "✓" if correct_baseline else "✗"
+            pred_baseline, baseline_trace = ask_baseline(
+                question, table, instruction=instruction, model=model
+            )
+            correct_baseline = evaluate_sample(pred_baseline, ground_truth, qtype, qsubtype)
+            status = "✓" if correct_baseline >= 1.0 else "✗"
             print(f"    [Baseline Result] {pred_baseline} {status}")
         except Exception as e:
             pred_baseline = ""
-            correct_baseline = False
+            correct_baseline = 0.0
             print(f"    [Baseline] ERROR - {e}")
 
         results_baseline.append({
@@ -295,7 +310,7 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
             "question": question,
             "ground_truth": ground_truth,
             "prediction": pred_baseline,
-            "correct": correct_baseline,
+            "score": correct_baseline,  # Float score (0.0 to 1.0)
             "trace": baseline_trace,
         })
 
@@ -303,12 +318,12 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
         skill_trace = None
         try:
             pred_skill, skill_trace = ask_with_skill(question, table, skill_prompt, model)
-            correct_skill = evaluate_sample(pred_skill, ground_truth, qtype)
-            status = "✓" if correct_skill else "✗"
+            correct_skill = evaluate_sample(pred_skill, ground_truth, qtype, qsubtype)
+            status = "✓" if correct_skill >= 1.0 else "✗"
             print(f"    [Skill Result] {pred_skill} {status}")
         except Exception as e:
             pred_skill = ""
-            correct_skill = False
+            correct_skill = 0.0
             print(f"    [Skill] ERROR - {e}")
 
         results_skill.append({
@@ -318,7 +333,7 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
             "question": question,
             "ground_truth": ground_truth,
             "prediction": pred_skill,
-            "correct": correct_skill,
+            "score": correct_skill,  # Float score (0.0 to 1.0)
             "trace": skill_trace,
         })
 
@@ -369,12 +384,14 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
                 "total_correct": eval_baseline["overall"]["correct"],
                 "total": eval_baseline["overall"]["total"],
                 "by_type": eval_baseline["by_type"],
+                "by_subtype": eval_baseline.get("by_subtype", {}),
             },
             "skill": {
                 "accuracy": acc_skill,
                 "total_correct": eval_skill["overall"]["correct"],
                 "total": eval_skill["overall"]["total"],
                 "by_type": eval_skill["by_type"],
+                "by_subtype": eval_skill.get("by_subtype", {}),
             },
             "improvement": improvement,
         },
@@ -387,6 +404,8 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
     # Add comparison trace (side-by-side)
     comparison = []
     for b, s in zip(results_baseline, results_skill):
+        b_score = b.get("score", 0.0)
+        s_score = s.get("score", 0.0)
         comparison.append({
             "id": b["id"],
             "qtype": b["qtype"],
@@ -394,11 +413,11 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
             "question": b["question"][:100] + "..." if len(b["question"]) > 100 else b["question"],
             "ground_truth": b["ground_truth"],
             "baseline_pred": b["prediction"],
-            "baseline_correct": b["correct"],
+            "baseline_score": b_score,
             "skill_pred": s["prediction"],
-            "skill_correct": s["correct"],
-            "skill_improved": s["correct"] and not b["correct"],
-            "skill_regressed": b["correct"] and not s["correct"],
+            "skill_score": s_score,
+            "skill_improved": s_score > b_score,  # Skill scored higher
+            "skill_regressed": s_score < b_score,  # Skill scored lower
         })
     output["comparison"] = comparison
 

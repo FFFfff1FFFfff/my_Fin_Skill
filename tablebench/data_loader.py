@@ -22,6 +22,7 @@ def load_from_jsonl(file_path: str, limit: Optional[int] = None) -> list[dict]:
                 "table": item.get("table", ""),
                 "question": item.get("question", ""),
                 "answer": item.get("answer", ""),
+                "instruction": item.get("instruction", ""),  # Official DP instruction
             })
     return samples
 
@@ -52,6 +53,7 @@ def load_from_json(file_path: str, limit: Optional[int] = None) -> list[dict]:
             "table": item.get("table", ""),
             "question": item.get("question", ""),
             "answer": item.get("answer", ""),
+            "instruction": item.get("instruction", ""),  # Official DP instruction
         })
     return samples
 
@@ -95,6 +97,7 @@ def load_from_huggingface(limit: Optional[int] = None) -> list[dict]:
             "table": table,
             "question": item.get("question", ""),
             "answer": item.get("answer", ""),
+            "instruction": item.get("instruction", ""),  # Official DP instruction
         })
     return samples
 
@@ -136,6 +139,7 @@ def filter_by_qsubtype(samples: list[dict], qsubtypes: list[str]) -> list[dict]:
 
 
 # Sample data for testing when HuggingFace is unavailable
+# instruction follows official DP (Direct Prompting) format
 SAMPLE_DATA = [
     {
         "id": "test_1",
@@ -143,7 +147,8 @@ SAMPLE_DATA = [
         "qsubtype": "Aggregation",
         "table": '{"columns": ["Product", "Sales"], "data": [["A", 100], ["B", 200], ["C", 150]]}',
         "question": "What is the total sales?",
-        "answer": "450"
+        "answer": "450",
+        "instruction": 'You are a table analyst. Your task is to answer questions based on the table content.\nThe answer should follow the format below:\nFinal Answer: AnswerName1, AnswerName2...\nAnswer should be a number or entity name, as short as possible, without any explanation.\n\n[TABLE]\n{"columns": ["Product", "Sales"], "data": [["A", 100], ["B", 200], ["C", 150]]}\n\nQuestion: What is the total sales?\nGive the final answer to the question directly without any explanation.',
     },
     {
         "id": "test_2",
@@ -151,7 +156,8 @@ SAMPLE_DATA = [
         "qsubtype": "MatchBased",
         "table": '{"columns": ["Name", "Age"], "data": [["Alice", 30], ["Bob", 25]]}',
         "question": "Is Alice older than Bob?",
-        "answer": "yes"
+        "answer": "yes",
+        "instruction": 'You are a table analyst. Your task is to answer questions based on the table content.\nThe answer should follow the format below:\nFinal Answer: AnswerName1, AnswerName2...\nAnswer should be a number or entity name, as short as possible, without any explanation.\n\n[TABLE]\n{"columns": ["Name", "Age"], "data": [["Alice", 30], ["Bob", 25]]}\n\nQuestion: Is Alice older than Bob?\nGive the final answer to the question directly without any explanation.',
     },
     {
         "id": "test_3",
@@ -159,7 +165,8 @@ SAMPLE_DATA = [
         "qsubtype": "Counting",
         "table": '{"columns": ["City", "Population"], "data": [["NYC", 8000000], ["LA", 4000000], ["Chicago", 2700000]]}',
         "question": "How many cities have population over 3 million?",
-        "answer": "2"
+        "answer": "2",
+        "instruction": 'You are a table analyst. Your task is to answer questions based on the table content.\nThe answer should follow the format below:\nFinal Answer: AnswerName1, AnswerName2...\nAnswer should be a number or entity name, as short as possible, without any explanation.\n\n[TABLE]\n{"columns": ["City", "Population"], "data": [["NYC", 8000000], ["LA", 4000000], ["Chicago", 2700000]]}\n\nQuestion: How many cities have population over 3 million?\nGive the final answer to the question directly without any explanation.',
     },
     {
         "id": "test_4",
@@ -167,7 +174,8 @@ SAMPLE_DATA = [
         "qsubtype": "Comparison",
         "table": '{"columns": ["Year", "Revenue"], "data": [[2020, 100], [2021, 110], [2022, 121]]}',
         "question": "What is the percentage increase in revenue from 2020 to 2022?",
-        "answer": "21"
+        "answer": "21",
+        "instruction": 'You are a table analyst. Your task is to answer questions based on the table content.\nThe answer should follow the format below:\nFinal Answer: AnswerName1, AnswerName2...\nAnswer should be a number or entity name, as short as possible, without any explanation.\n\n[TABLE]\n{"columns": ["Year", "Revenue"], "data": [[2020, 100], [2021, 110], [2022, 121]]}\n\nQuestion: What is the percentage increase in revenue from 2020 to 2022?\nGive the final answer to the question directly without any explanation.',
     },
 ]
 
