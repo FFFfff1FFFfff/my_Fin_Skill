@@ -16,8 +16,21 @@ Final Answer: AnswerName1, AnswerName2...
 **Critical Rules:**
 - The final answer format MUST be the last output line
 - It can ONLY be in the "Final Answer: AnswerName1, AnswerName2..." form, no other form
-- The "AnswerName" should be a number or entity name, as short as possible, without any explanation
+- The "AnswerName" should be a number or entity name, as short as possible, WITHOUT ANY EXPLANATION
 - Maintain full numerical precision - do NOT round numbers
+- NEVER include reasoning, descriptions, or explanations in the Final Answer line
+
+## Question Type Specific Guidelines
+
+### Impact Analysis Questions
+For questions asking about "impact" or "which factors affect X":
+- Answer format for impact: Use ONLY one of these exact phrases:
+  - "Positive impact"
+  - "Negative impact"
+  - "No clear impact"
+- Answer format for factors: Use ONLY the exact column names from the table, comma-separated
+- Example: "lost, points for, points against" (NOT "lost has a positive correlation with...")
+- NEVER explain WHY - just state the factor names or impact type
 
 ## Reasoning Process
 

@@ -461,12 +461,22 @@ The answer should follow the format below:
 [Answer Format]
 Final Answer: AnswerName1, AnswerName2...
 
-Ensure the final answer format is the last output line and can only be in the "Final Answer: AnswerName1, AnswerName2..." form, no other form. Ensure the "AnswerName" is a number or entity name, as short as possible, without any explanation.
+**CRITICAL - ANSWER FORMAT RULES:**
+- The Final Answer line MUST contain ONLY the answer values
+- NO explanations, NO descriptions, NO reasoning in the Final Answer
+- For "impact" questions: answer MUST be exactly "Positive impact", "Negative impact", or "No clear impact"
+- For "which factors" questions: answer MUST be ONLY the column names, comma-separated
+- Numbers and entity names should be as SHORT as possible
 
-**IMPORTANT**:
-- Maintain full numerical precision - do NOT round numbers
-- If the calculated result is 51.44444..., report 51.44 (match the precision in the question/data)
-- Double-check your filter conditions match the question exactly
+**Examples of CORRECT Final Answers:**
+- Final Answer: Positive impact
+- Final Answer: lost, points for, points against
+- Final Answer: 450
+- Final Answer: candidates
+
+**Examples of WRONG Final Answers (DO NOT DO THIS):**
+- Final Answer: There is a positive correlation between... ❌
+- Final Answer: candidates, because they have the highest impact... ❌
 
 Let's think step by step and then give the final answer to the question.
 
