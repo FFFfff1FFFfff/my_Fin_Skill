@@ -338,7 +338,7 @@ Question: {question}"""
 
 
 def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
-                  model: str = "claude-sonnet-4-5-20250929"):
+                  model: str = "claude-sonnet-4-5-20250929", qtype: str = None):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
 
@@ -347,18 +347,38 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
         limit: Number of samples to test
         offset: Skip first N samples
         model: Model to use
+        qtype: Filter by question type (FC/NR/DA/VIZ or full names)
     """
+    # Question type mapping (short -> full)
+    QTYPE_MAP = {
+        "FC": "FactChecking",
+        "NR": "NumericalReasoning",
+        "DA": "DataAnalysis",
+        "VIZ": "Visualization",
+        # Also accept full names
+        "FactChecking": "FactChecking",
+        "NumericalReasoning": "NumericalReasoning",
+        "DataAnalysis": "DataAnalysis",
+        "Visualization": "Visualization",
+    }
+
     print("=" * 70)
     print("TableBench Skill Benchmark")
     print("=" * 70)
 
     # Load data
-    load_limit = (offset + limit) if limit else None
-    print(f"\nLoading data (source={source}, offset={offset}, limit={limit})...")
+    load_limit = None  # Load all first, then filter
+    print(f"\nLoading data (source={source}, offset={offset}, limit={limit}, qtype={qtype})...")
     if source == "sample":
         samples = load_sample_data()
     else:
-        samples = load_tablebench(source=source, limit=load_limit)
+        samples = load_tablebench(source=source, limit=None)  # Load all
+
+    # Filter by question type if specified
+    if qtype:
+        qtype_full = QTYPE_MAP.get(qtype.upper() if len(qtype) <= 3 else qtype, qtype)
+        samples = [s for s in samples if s["qtype"] == qtype_full]
+        print(f"Filtered to qtype={qtype_full}: {len(samples)} samples")
 
     # Apply offset
     if offset > 0:
@@ -369,7 +389,7 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
     if limit and len(samples) > limit:
         samples = samples[:limit]
 
-    print(f"Loaded {len(samples)} samples (excluding Visualization)")
+    print(f"Loaded {len(samples)} samples")
 
     # Load skill
     skill_manager = SkillManager()
@@ -545,6 +565,9 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
     parser.add_argument("--offset", type=int, default=0, help="Skip first N samples")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929", help="Model to use")
+    parser.add_argument("--qtype", type=str, default=None,
+                        help="Filter by question type: FC (FactChecking), NR (NumericalReasoning), DA (DataAnalysis), VIZ (Visualization)")
 
     args = parser.parse_args()
-    run_benchmark(source=args.source, limit=args.limit, offset=args.offset, model=args.model)
+    run_benchmark(source=args.source, limit=args.limit, offset=args.offset,
+                  model=args.model, qtype=args.qtype)
