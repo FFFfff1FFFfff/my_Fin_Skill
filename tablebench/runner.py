@@ -628,14 +628,30 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
                     # Execute code and extract chart data
                     success, pred_data, error = execute_chart_code(code)
 
-                    # Parse reference data from ground_truth (expected to be JSON list or chart values)
+                    # Parse reference data from ground_truth
+                    # Format: "y_references = [[24, 30, 36, ...]]" or "y_references = [[...], [...]]"
                     try:
-                        if ground_truth.startswith('['):
+                        ref_data = []
+                        if 'y_references' in ground_truth:
+                            # Extract the list part after '='
+                            match = re.search(r'y_references\s*=\s*(\[.+\])', ground_truth)
+                            if match:
+                                # Use ast.literal_eval to safely parse Python list
+                                import ast
+                                nested_list = ast.literal_eval(match.group(1))
+                                # Flatten nested list: [[1,2], [3,4]] -> [1,2,3,4]
+                                for sublist in nested_list:
+                                    if isinstance(sublist, list):
+                                        ref_data.extend([float(x) for x in sublist])
+                                    else:
+                                        ref_data.append(float(sublist))
+                        elif ground_truth.startswith('['):
                             ref_data = json.loads(ground_truth)
                         else:
                             # Try to parse as comma-separated numbers
                             ref_data = [float(x.strip()) for x in ground_truth.split(',') if x.strip()]
-                    except (json.JSONDecodeError, ValueError):
+                    except (json.JSONDecodeError, ValueError, SyntaxError) as e:
+                        print(f"        [Warning] Failed to parse ref_data: {e}")
                         ref_data = []
 
                     if success and pred_data and ref_data:
