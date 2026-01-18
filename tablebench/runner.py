@@ -422,7 +422,7 @@ Analyze the table and give the final answer."""
     start_time = time.time()
     response = client.messages.create(
         model=model,
-        max_tokens=1024,  # Increased for reasoning
+        max_tokens=256,  # Keep small for DP (direct answer, no reasoning)
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
