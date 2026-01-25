@@ -44,66 +44,102 @@ from skills.spreadsheet_pot.pot_tools import (
 # STAGE MONITOR: Track reasoning stages in PoT multi-round flow
 # =============================================================================
 
-def parse_pot_stages(response_text: str, round_num: int) -> dict:
+def parse_pot_stages(response_text: str, round_num: int, is_final_round: bool = False,
+                     exec_success: bool = False) -> dict:
     """
     Parse PoT response to extract structured reasoning stages.
 
     Expected stages for SpreadsheetBench PoT:
-    - Round 1: EXPLORE (list sheets, tables, columns)
-    - Round 2+: IMPLEMENT (solution based on discovered structure)
-    - All rounds: EXECUTE (code execution)
-    - Final: VERIFY (self-check)
+    - Round 1-2: EXPLORE (list sheets, tables, columns - structure discovery)
+    - Round 2+: IMPLEMENT (actual solution code with data transformation)
+    - All rounds: EXECUTE (successful code execution)
+    - Final round only: VERIFY (self-check after successful execution)
+
+    Args:
+        response_text: The LLM response text
+        round_num: Current round number (1-indexed)
+        is_final_round: Whether this is the final round
+        exec_success: Whether code execution was successful this round
     """
     stages = {
-        "explore": None,      # Structure exploration (Round 1)
+        "explore": None,      # Structure exploration (Round 1-2)
         "implement": None,    # Solution implementation
-        "execute": None,      # Code execution intent
-        "verify": None,       # Self-check / verification
+        "execute": None,      # Code execution (set externally based on exec result)
+        "verify": None,       # Self-check / verification (final round only)
         "raw": response_text,
     }
 
-    # For Round 1, look for exploration patterns
-    if round_num == 1:
-        explore_patterns = [
-            r'(?:list|show|print|get)\s*(?:all\s*)?(?:sheet|worksheet|tab)',
-            r'(?:explore|understand|analyze)\s*(?:the\s*)?(?:structure|schema|layout)',
-            r'(?:column|header|field)\s*(?:name|type)',
-            r'\.sheet_names',
-            r'pd\.read_excel.*sheet_name',
+    # Extract code block for analysis
+    code_match = re.search(r'```python\s*(.*?)```', response_text, re.DOTALL)
+    code_block = code_match.group(1).strip() if code_match else ""
+
+    # EXPLORE: Only in early rounds (1-2), must have actual structure discovery code
+    if round_num <= 2 and code_block:
+        explore_code_patterns = [
+            r'\.sheet_names',                    # Getting sheet names
+            r'\.sheetnames',                     # openpyxl sheetnames
+            r'pd\.ExcelFile',                    # Excel file object
+            r'\.keys\(\)',                       # Dict keys (sheet names)
+            r'print\(.*sheet',                   # Printing sheet info
+            r'print\(.*column',                  # Printing column info
+            r'\.columns\.tolist\(\)',            # Getting column names
+            r'\.head\(\)',                       # Previewing data
+            r'\.info\(\)',                       # DataFrame info
+            r'\.dtypes',                         # Column types
         ]
-        for pattern in explore_patterns:
-            if re.search(pattern, response_text, re.IGNORECASE):
-                # Extract the exploration content
-                match = re.search(r'```python\s*(.*?)```', response_text, re.DOTALL)
-                if match:
-                    stages["explore"] = match.group(1).strip()[:300]
+        for pattern in explore_code_patterns:
+            if re.search(pattern, code_block, re.IGNORECASE):
+                stages["explore"] = code_block[:300]
                 break
 
-    # Look for implementation patterns
-    impl_patterns = [
-        r'(?:calculate|compute|sum|average|count|filter)',
-        r'(?:write|save|output)\s*(?:to|the)',
-        r'df\[.*\]\s*=',
-        r'\.to_excel',
-    ]
-    for pattern in impl_patterns:
-        if re.search(pattern, response_text, re.IGNORECASE):
-            match = re.search(r'```python\s*(.*?)```', response_text, re.DOTALL)
-            if match:
-                stages["implement"] = match.group(1).strip()[:300]
-            break
+    # IMPLEMENT: Must have actual data transformation/computation code
+    if code_block:
+        impl_code_patterns = [
+            r'\.to_excel\(',                     # Writing to Excel
+            r'\.save\(',                         # Saving workbook
+            r'df\[.+\]\s*=',                     # DataFrame assignment
+            r'ws\[.+\]\s*=',                     # Worksheet cell assignment
+            r'\.loc\[.*\]\s*=',                  # DataFrame loc assignment
+            r'\.iloc\[.*\]\s*=',                 # DataFrame iloc assignment
+            r'\.apply\(',                        # Apply function
+            r'\.merge\(',                        # Merge DataFrames
+            r'\.concat\(',                       # Concatenate
+            r'\.groupby\(',                      # Group by operations
+            r'\.pivot',                          # Pivot operations
+            r'\.sort_values\(',                  # Sorting
+            r'\.drop\(',                         # Drop rows/columns
+            r'\.fillna\(',                       # Fill NA values
+            r'for\s+.*\s+in\s+.*:.*=',          # Loop with assignment
+        ]
+        for pattern in impl_code_patterns:
+            if re.search(pattern, code_block, re.IGNORECASE | re.DOTALL):
+                stages["implement"] = code_block[:300]
+                break
 
-    # Look for verification patterns
-    verify_patterns = [
-        r'(?:verify|check|confirm|validate)',
-        r'(?:print|display)\s*.*(?:result|output|answer)',
-        r'answer_position',
-        r'self[_-]?check',
-    ]
-    for pattern in verify_patterns:
-        if re.search(pattern, response_text, re.IGNORECASE):
-            stages["verify"] = True
-            break
+    # VERIFY: Only count in final round OR when execution succeeded with explicit check
+    if is_final_round or (exec_success and round_num >= 2):
+        verify_code_patterns = [
+            r'print\(.*(?:result|output|final|answer|done|complete)',  # Print results
+            r'assert\s+',                        # Assertions
+            r'==\s*expected',                    # Comparison with expected
+            r'\.equals\(',                       # DataFrame equals check
+        ]
+        verify_text_patterns = [
+            r'(?:verify|check|confirm|validate)\s+(?:the\s+)?(?:result|output|answer)',
+            r'(?:successfully|completed|finished)',
+            r'output\s+(?:file|spreadsheet)\s+(?:has been|is)\s+(?:created|saved|updated)',
+        ]
+
+        for pattern in verify_code_patterns:
+            if re.search(pattern, code_block, re.IGNORECASE):
+                stages["verify"] = True
+                break
+
+        if not stages["verify"]:
+            for pattern in verify_text_patterns:
+                if re.search(pattern, response_text, re.IGNORECASE):
+                    stages["verify"] = True
+                    break
 
     return stages
 
@@ -112,43 +148,56 @@ def analyze_stage_metrics(trace: dict) -> dict:
     """
     Analyze stage completion metrics for a sample.
 
+    Strict order check: Stages must appear in sequence explore → implement → execute → verify.
+    A stage is considered "first appeared" at the round where it was first detected.
+
     Returns:
         dict with metrics:
         - stages_completed: list of completed stages
-        - stages_in_order: bool (whether stages followed expected order)
+        - stages_in_order: bool (whether stages followed strict expected order)
         - total_stages: int
         - stage_completion_rate: float
+        - first_appearance: dict mapping stage to round number
     """
     expected_order = ["explore", "implement", "execute", "verify"]
-    completed_stages = []
+    first_appearance = {}  # stage -> round_num when first detected
 
     rounds = trace.get("rounds", [])
+    total_rounds = len(rounds)
+
     for i, round_data in enumerate(rounds):
         round_num = round_data.get("round", i + 1)
         response = round_data.get("response", "")
+        is_final = (i == total_rounds - 1)
+        exec_success = round_data.get("exec", {}).get("success", False)
 
-        stages = parse_pot_stages(response, round_num)
+        stages = parse_pot_stages(response, round_num, is_final, exec_success)
 
-        if stages["explore"] and "explore" not in completed_stages:
-            completed_stages.append("explore")
-        if stages["implement"] and "implement" not in completed_stages:
-            completed_stages.append("implement")
-        if round_data.get("exec", {}).get("success"):
-            if "execute" not in completed_stages:
-                completed_stages.append("execute")
-        if stages["verify"] and "verify" not in completed_stages:
-            completed_stages.append("verify")
+        # Record first appearance of each stage
+        if stages["explore"] and "explore" not in first_appearance:
+            first_appearance["explore"] = round_num
+        if stages["implement"] and "implement" not in first_appearance:
+            first_appearance["implement"] = round_num
+        if exec_success and "execute" not in first_appearance:
+            first_appearance["execute"] = round_num
+        if stages["verify"] and "verify" not in first_appearance:
+            first_appearance["verify"] = round_num
 
-    # Check if stages are in expected order
+    # Build completed stages list in order of first appearance
+    completed_stages = sorted(first_appearance.keys(), key=lambda s: first_appearance[s])
+
+    # Strict order check: stages must appear in expected_order sequence
+    # e.g., if we have [explore, implement, execute], check that explore < implement < execute
     stages_in_order = True
-    last_idx = -1
+    prev_expected_idx = -1
     for stage in completed_stages:
         if stage in expected_order:
-            idx = expected_order.index(stage)
-            if idx < last_idx:
+            curr_idx = expected_order.index(stage)
+            if curr_idx < prev_expected_idx:
+                # Stage appeared out of order
                 stages_in_order = False
                 break
-            last_idx = idx
+            prev_expected_idx = curr_idx
 
     return {
         "stages_completed": completed_stages,
@@ -156,6 +205,7 @@ def analyze_stage_metrics(trace: dict) -> dict:
         "total_stages": len(completed_stages),
         "stage_completion_rate": len(completed_stages) / len(expected_order),
         "expected_stages": expected_order,
+        "first_appearance": first_appearance,
     }
 
 
@@ -192,7 +242,8 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
         print(f"      [R1] LLM call...", end="", flush=True)
         response, duration_ms = call_llm(messages, model=model)
         code = extract_code(response)
-        stages = parse_pot_stages(response, round_num=1)
+        # Single-round is always the final round
+        stages = parse_pot_stages(response, round_num=1, is_final_round=True, exec_success=False)
         print(f" {len(code)}c {duration_ms}ms")
 
         # Print stage info
@@ -222,12 +273,14 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
     # Multi-round mode
     for turn in range(max_turns):
         round_num = turn + 1
+        is_potentially_final = (round_num == max_turns)  # May end early if output created
         print(f"      [R{round_num}/{max_turns}] LLM...", end="", flush=True)
 
         response, duration_ms = call_llm(messages, model=model)
         messages.append({"role": "assistant", "content": response})
         code = extract_code(response)
-        stages = parse_pot_stages(response, round_num)
+        # For display, we don't know exec_success yet; analyze_stage_metrics does final analysis
+        stages = parse_pot_stages(response, round_num, is_final_round=is_potentially_final, exec_success=False)
         print(f" {len(code)}c {duration_ms}ms", end="", flush=True)
 
         round_data = {

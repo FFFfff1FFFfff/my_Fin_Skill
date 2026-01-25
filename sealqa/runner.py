@@ -32,16 +32,20 @@ client = Anthropic()
 # STAGE MONITOR: Track reasoning stages in conflicting_info_reasoner flow
 # =============================================================================
 
-def parse_skill_stages(response_text: str) -> dict:
+def parse_skill_stages(response_text: str, used_web_search: bool = False) -> dict:
     """
     Parse skill response to extract structured reasoning stages.
 
     Expected stages based on conflicting_info_reasoner skill:
-    - SEARCH: Multiple query search (search findings section)
-    - CATEGORIZE: Rate source reliability (high/medium/low)
-    - DETECT: Detect conflicts (conflicts noted)
-    - RESOLVE: Resolve conflicts (decision made)
-    - FINAL: Formulate answer (conclusion)
+    - SEARCH: Web search was used or search results mentioned
+    - CATEGORIZE: Source reliability assessment (explicit rating)
+    - DETECT: Conflict detection between sources (explicit mention)
+    - RESOLVE: Reasoning to resolve conflicts or reach conclusion
+    - FINAL: Final answer is provided
+
+    Args:
+        response_text: The LLM response text
+        used_web_search: Whether web search tool was actually invoked
     """
     stages = {
         "search": None,       # Search findings
@@ -52,40 +56,48 @@ def parse_skill_stages(response_text: str) -> dict:
         "raw": response_text,
     }
 
-    # Look for search patterns
-    search_patterns = [
-        r'(?:search|found|sources?|results?)\s*(?:indicate|show|suggest)',
-        r'(?:according to|based on)\s+(?:the\s+)?(?:search|sources?)',
-        r'search findings',
-    ]
-    for pattern in search_patterns:
-        match = re.search(pattern, response_text, re.IGNORECASE)
-        if match:
-            # Extract surrounding context
-            start = max(0, match.start() - 20)
-            end = min(len(response_text), match.end() + 100)
-            stages["search"] = response_text[start:end].strip()[:200]
-            break
+    # SEARCH: Web search was used OR explicit mention of search/sources
+    if used_web_search:
+        stages["search"] = "web_search_invoked"
+    else:
+        search_patterns = [
+            r'(?:search results?|web search|I searched)',
+            r'(?:according to|based on)\s+(?:my\s+)?search',
+            r'(?:found|retrieved)\s+(?:information|results)',
+            r'sources?\s+(?:indicate|show|report|state)',
+        ]
+        for pattern in search_patterns:
+            match = re.search(pattern, response_text, re.IGNORECASE)
+            if match:
+                start = max(0, match.start() - 10)
+                end = min(len(response_text), match.end() + 80)
+                stages["search"] = response_text[start:end].strip()[:200]
+                break
 
-    # Look for categorize patterns (reliability rating)
+    # CATEGORIZE: Explicit source reliability assessment
+    # Must have explicit reliability/credibility language
     categorize_patterns = [
-        r'(?:reliability|credibility|trustworth)\s*[:=]?\s*(?:high|medium|low)',
-        r'(?:official|major news|blog|social media)',
-        r'(?:reliable|unreliable)\s+source',
+        r'(?:source|website|site)\s*(?:is|are)\s*(?:reliable|unreliable|credible|trustworthy)',
+        r'(?:reliability|credibility|trustworthiness)\s*[:=]?\s*(?:high|medium|low|good|poor)',
+        r'(?:official|authoritative|reputable)\s+(?:source|website)',
+        r'(?:primary|secondary|tertiary)\s+source',
     ]
     for pattern in categorize_patterns:
         match = re.search(pattern, response_text, re.IGNORECASE)
         if match:
             start = max(0, match.start() - 10)
-            end = min(len(response_text), match.end() + 50)
+            end = min(len(response_text), match.end() + 60)
             stages["categorize"] = response_text[start:end].strip()[:150]
             break
 
-    # Look for conflict detection patterns
+    # DETECT: Explicit conflict/contradiction detection
+    # Must explicitly mention conflicts or contradictions
     detect_patterns = [
-        r'(?:conflict|contradict|disagree|inconsistent)',
-        r'(?:sources? differ|different (?:sources|information))',
-        r'(?:however|but|although|while).*(?:other|another)\s+source',
+        r'(?:conflict|contradiction|discrepancy)\s+(?:between|in|found)',
+        r'(?:conflicting|contradictory)\s+(?:information|sources|data|reports)',
+        r'sources?\s+(?:disagree|differ|conflict)',
+        r'(?:inconsistent|contradicting)\s+(?:information|claims|statements)',
+        r'found\s+(?:conflicting|different)\s+(?:information|answers)',
     ]
     for pattern in detect_patterns:
         match = re.search(pattern, response_text, re.IGNORECASE)
@@ -95,11 +107,14 @@ def parse_skill_stages(response_text: str) -> dict:
             stages["detect"] = response_text[start:end].strip()[:150]
             break
 
-    # Look for resolve patterns
+    # RESOLVE: Explicit reasoning/resolution step
+    # Must show reasoning process, not just conclusions
     resolve_patterns = [
-        r'(?:therefore|thus|so|hence|conclude)',
-        r'(?:most likely|most reliable|best answer)',
-        r'(?:based on|given|considering)',
+        r'(?:resolving|to resolve)\s+(?:this|the)\s+(?:conflict|contradiction)',
+        r'(?:weighing|considering|comparing)\s+(?:the\s+)?(?:sources|evidence)',
+        r'(?:more reliable|most credible|best supported)',
+        r'(?:given|considering)\s+(?:the\s+)?(?:evidence|sources|reliability)',
+        r'(?:therefore|thus|consequently),?\s+(?:I|we|the)',
     ]
     for pattern in resolve_patterns:
         match = re.search(pattern, response_text, re.IGNORECASE)
@@ -109,16 +124,27 @@ def parse_skill_stages(response_text: str) -> dict:
             stages["resolve"] = response_text[start:end].strip()[:150]
             break
 
-    # Extract final answer (last sentence or explicit answer)
+    # FINAL: Final answer is provided (always check)
+    # Look for explicit answer markers or the substantive answer
     final_patterns = [
-        r'(?:the answer is|answer:|in conclusion)\s*(.+?)(?:\.|$)',
-        r'(?:^|\n)([^.]+?)(?:\.|$)\s*$',  # Last sentence
+        r'\*\*(?:answer|final answer)\*\*[:\s]*(.+?)(?:\n|$)',  # **Answer**: ...
+        r'(?:the answer is|answer:|final answer:)\s*(.+?)(?:\.|$)',
+        r'(?:in conclusion|to summarize|in summary)[,:]?\s*(.+?)(?:\.|$)',
     ]
     for pattern in final_patterns:
-        match = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE)
+        match = re.search(pattern, response_text, re.IGNORECASE)
         if match:
-            stages["final"] = match.group(1).strip()[:200] if match.lastindex else match.group(0).strip()[:200]
-            break
+            content = match.group(1).strip() if match.lastindex else match.group(0).strip()
+            if len(content) > 5:  # Avoid empty matches
+                stages["final"] = content[:200]
+                break
+
+    # If no explicit final answer marker, check if response has substantive content
+    if not stages["final"] and len(response_text.strip()) > 20:
+        # Use first substantive line as the answer indicator
+        lines = [l.strip() for l in response_text.split('\n') if l.strip() and len(l.strip()) > 10]
+        if lines:
+            stages["final"] = lines[0][:200]
 
     return stages
 
@@ -281,8 +307,11 @@ Give a direct, concise answer."""
 
     duration_ms = int((time.time() - start_time) * 1000)
 
+    # Determine if web search was actually used
+    used_web_search = use_search and (search_backend == "builtin" or search_results is not None)
+
     # Parse stages from response
-    stages = parse_skill_stages(full_response_text)
+    stages = parse_skill_stages(full_response_text, used_web_search=used_web_search)
     stage_metrics = analyze_stage_metrics(stages)
 
     trace = {
