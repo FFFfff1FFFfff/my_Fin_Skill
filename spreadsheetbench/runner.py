@@ -19,8 +19,10 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
+import time
 from datetime import datetime
 
 import anthropic
@@ -38,38 +40,166 @@ from skills.spreadsheet_pot.pot_tools import (
 )
 
 
+# =============================================================================
+# STAGE MONITOR: Track reasoning stages in PoT multi-round flow
+# =============================================================================
+
+def parse_pot_stages(response_text: str, round_num: int) -> dict:
+    """
+    Parse PoT response to extract structured reasoning stages.
+
+    Expected stages for SpreadsheetBench PoT:
+    - Round 1: EXPLORE (list sheets, tables, columns)
+    - Round 2+: IMPLEMENT (solution based on discovered structure)
+    - All rounds: EXECUTE (code execution)
+    - Final: VERIFY (self-check)
+    """
+    stages = {
+        "explore": None,      # Structure exploration (Round 1)
+        "implement": None,    # Solution implementation
+        "execute": None,      # Code execution intent
+        "verify": None,       # Self-check / verification
+        "raw": response_text,
+    }
+
+    # For Round 1, look for exploration patterns
+    if round_num == 1:
+        explore_patterns = [
+            r'(?:list|show|print|get)\s*(?:all\s*)?(?:sheet|worksheet|tab)',
+            r'(?:explore|understand|analyze)\s*(?:the\s*)?(?:structure|schema|layout)',
+            r'(?:column|header|field)\s*(?:name|type)',
+            r'\.sheet_names',
+            r'pd\.read_excel.*sheet_name',
+        ]
+        for pattern in explore_patterns:
+            if re.search(pattern, response_text, re.IGNORECASE):
+                # Extract the exploration content
+                match = re.search(r'```python\s*(.*?)```', response_text, re.DOTALL)
+                if match:
+                    stages["explore"] = match.group(1).strip()[:300]
+                break
+
+    # Look for implementation patterns
+    impl_patterns = [
+        r'(?:calculate|compute|sum|average|count|filter)',
+        r'(?:write|save|output)\s*(?:to|the)',
+        r'df\[.*\]\s*=',
+        r'\.to_excel',
+    ]
+    for pattern in impl_patterns:
+        if re.search(pattern, response_text, re.IGNORECASE):
+            match = re.search(r'```python\s*(.*?)```', response_text, re.DOTALL)
+            if match:
+                stages["implement"] = match.group(1).strip()[:300]
+            break
+
+    # Look for verification patterns
+    verify_patterns = [
+        r'(?:verify|check|confirm|validate)',
+        r'(?:print|display)\s*.*(?:result|output|answer)',
+        r'answer_position',
+        r'self[_-]?check',
+    ]
+    for pattern in verify_patterns:
+        if re.search(pattern, response_text, re.IGNORECASE):
+            stages["verify"] = True
+            break
+
+    return stages
+
+
+def analyze_stage_metrics(trace: dict) -> dict:
+    """
+    Analyze stage completion metrics for a sample.
+
+    Returns:
+        dict with metrics:
+        - stages_completed: list of completed stages
+        - stages_in_order: bool (whether stages followed expected order)
+        - total_stages: int
+        - stage_completion_rate: float
+    """
+    expected_order = ["explore", "implement", "execute", "verify"]
+    completed_stages = []
+
+    rounds = trace.get("rounds", [])
+    for i, round_data in enumerate(rounds):
+        round_num = round_data.get("round", i + 1)
+        response = round_data.get("response", "")
+
+        stages = parse_pot_stages(response, round_num)
+
+        if stages["explore"] and "explore" not in completed_stages:
+            completed_stages.append("explore")
+        if stages["implement"] and "implement" not in completed_stages:
+            completed_stages.append("implement")
+        if round_data.get("exec", {}).get("success"):
+            if "execute" not in completed_stages:
+                completed_stages.append("execute")
+        if stages["verify"] and "verify" not in completed_stages:
+            completed_stages.append("verify")
+
+    # Check if stages are in expected order
+    stages_in_order = True
+    last_idx = -1
+    for stage in completed_stages:
+        if stage in expected_order:
+            idx = expected_order.index(stage)
+            if idx < last_idx:
+                stages_in_order = False
+                break
+            last_idx = idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+    }
+
+
 client = anthropic.Anthropic()
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
-def call_llm(messages: list, model: str = DEFAULT_MODEL) -> str:
-    """Call Claude API."""
+def call_llm(messages: list, model: str = DEFAULT_MODEL) -> tuple:
+    """Call Claude API. Returns (response_text, duration_ms)."""
+    start_time = time.time()
     response = client.messages.create(
         model=model,
         max_tokens=4096,
         messages=messages,
     )
-    return response.content[0].text
+    duration_ms = int((time.time() - start_time) * 1000)
+    return response.content[0].text, duration_ms
 
 
 def run_pot(sample: dict, setting: str, max_turns: int, model: str,
             test_input: str, test_output: str) -> dict:
     """
-    Run PoT inference and return detailed trace.
+    Run PoT inference and return detailed trace with stage monitoring.
 
-    Returns dict with: code, turns, rounds (list of round details)
+    Returns dict with: code, turns, rounds (list of round details), stage_metrics
     """
     prompt = build_prompt(sample, setting=setting, max_turn_num=max_turns, output_path=test_output or "output.xlsx")
     messages = [{"role": "user", "content": prompt}]
 
-    trace = {"rounds": [], "final_code": None, "total_turns": 0}
+    trace = {"rounds": [], "final_code": None, "total_turns": 0, "stage_metrics": None}
 
     # Single-round mode
     if setting == "react_exec":
         print(f"      [R1] LLM call...", end="", flush=True)
-        response = call_llm(messages, model=model)
+        response, duration_ms = call_llm(messages, model=model)
         code = extract_code(response)
-        print(f" {len(code)} chars code")
+        stages = parse_pot_stages(response, round_num=1)
+        print(f" {len(code)}c {duration_ms}ms")
+
+        # Print stage info
+        if stages["explore"]:
+            print(f"        → Explore: {stages['explore'][:50]}...")
+        if stages["implement"]:
+            print(f"        → Implement: {stages['implement'][:50]}...")
 
         trace["rounds"].append({
             "round": 1,
@@ -77,9 +207,16 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
             "code": code,
             "exec": None,
             "feedback": None,
+            "duration_ms": duration_ms,
+            "stages": {
+                "explore": stages["explore"],
+                "implement": stages["implement"],
+                "verify": stages["verify"],
+            },
         })
         trace["final_code"] = code
         trace["total_turns"] = 1
+        trace["stage_metrics"] = analyze_stage_metrics(trace)
         return trace
 
     # Multi-round mode
@@ -87,10 +224,11 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
         round_num = turn + 1
         print(f"      [R{round_num}/{max_turns}] LLM...", end="", flush=True)
 
-        response = call_llm(messages, model=model)
+        response, duration_ms = call_llm(messages, model=model)
         messages.append({"role": "assistant", "content": response})
         code = extract_code(response)
-        print(f" {len(code)}c", end="", flush=True)
+        stages = parse_pot_stages(response, round_num)
+        print(f" {len(code)}c {duration_ms}ms", end="", flush=True)
 
         round_data = {
             "round": round_num,
@@ -99,13 +237,31 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
             "exec": None,
             "feedback": None,
             "output_created": False,
+            "duration_ms": duration_ms,
+            "stages": {
+                "explore": stages["explore"],
+                "implement": stages["implement"],
+                "verify": stages["verify"],
+            },
         }
+
+        # Print stage info inline
+        stage_tags = []
+        if stages["explore"]:
+            stage_tags.append("EXPLORE")
+        if stages["implement"]:
+            stage_tags.append("IMPL")
+        if stages["verify"]:
+            stage_tags.append("VERIFY")
+        if stage_tags:
+            print(f" [{'/'.join(stage_tags)}]", end="")
 
         if not test_input or not test_output:
             trace["rounds"].append(round_data)
             trace["final_code"] = code
             trace["total_turns"] = round_num
             print(" (no test file)")
+            trace["stage_metrics"] = analyze_stage_metrics(trace)
             return trace
 
         # Remove old output
@@ -134,8 +290,10 @@ def run_pot(sample: dict, setting: str, max_turns: int, model: str,
         trace["total_turns"] = round_num
 
         if output_created:
+            trace["stage_metrics"] = analyze_stage_metrics(trace)
             return trace
 
+    trace["stage_metrics"] = analyze_stage_metrics(trace)
     return trace
 
 
@@ -200,6 +358,7 @@ def run_benchmark(
     all_traces = []
     metrics_by_setting = {s: [] for s in settings_to_run}
     total_turns = {s: 0 for s in settings_to_run}
+    stage_metrics_by_setting = {s: [] for s in settings_to_run}  # Stage monitor aggregation
 
     for i, sample in enumerate(samples):
         print(f"\n[{i+1}/{len(samples)}] ID: {sample['id']} | {sample['instruction_type']}")
@@ -249,12 +408,17 @@ def run_benchmark(
                 else:
                     print(f"      → (no test) Turns:{trace['total_turns']}")
 
+                stage_metrics = trace.get("stage_metrics")
                 sample_trace["settings"][run_setting] = {
                     "turns": trace["total_turns"],
                     "rounds": trace["rounds"],
                     "final_code": trace["final_code"],
                     "evaluation": eval_result,
+                    "stage_metrics": stage_metrics,
                 }
+                # Collect stage metrics for aggregation
+                if stage_metrics:
+                    stage_metrics_by_setting[run_setting].append(stage_metrics)
 
             except Exception as e:
                 print(f"      → ERROR: {e}")
@@ -302,6 +466,42 @@ def run_benchmark(
         print(f"  Soft: {multi['soft_restriction_avg'] - base['soft_restriction_avg']:+.1%}")
         print(f"  Hard: {multi['hard_restriction_avg'] - base['hard_restriction_avg']:+.1%}")
 
+    # Stage Monitor Summary
+    print("\n" + "-" * 40)
+    print("STAGE MONITOR SUMMARY")
+    aggregated_stage_metrics = {}
+    for run_setting in settings_to_run:
+        stage_list = stage_metrics_by_setting[run_setting]
+        if stage_list:
+            total = len(stage_list)
+            in_order_count = sum(1 for s in stage_list if s.get("stages_in_order", False))
+            avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_list) / total
+
+            # Count each stage
+            stage_counts = {"explore": 0, "implement": 0, "execute": 0, "verify": 0}
+            for s in stage_list:
+                for stage in s.get("stages_completed", []):
+                    if stage in stage_counts:
+                        stage_counts[stage] += 1
+
+            aggregated = {
+                "total_samples": total,
+                "stages_in_order_count": in_order_count,
+                "stages_in_order_rate": in_order_count / total,
+                "avg_completion_rate": avg_completion,
+                "stage_counts": stage_counts,
+                "stage_rates": {k: v / total for k, v in stage_counts.items()},
+            }
+            aggregated_stage_metrics[run_setting] = aggregated
+
+            label = "baseline" if run_setting == "react_exec" else run_setting
+            print(f"\n[{label}]")
+            print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+            print(f"  Avg completion rate: {avg_completion:.1%}")
+            print(f"  Stage breakdown:")
+            for stage, count in stage_counts.items():
+                print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+
     # Save single JSON
     output_data = {
         "meta": {
@@ -312,6 +512,7 @@ def run_benchmark(
             "total_samples": len(samples),
         },
         "metrics": final_metrics,
+        "stage_monitor": aggregated_stage_metrics,  # Aggregated stage metrics
         "traces": all_traces,
     }
 

@@ -2,11 +2,20 @@
 """
 SealQA benchmark runner: compare baseline vs with-skill performance
 Supports web search via built-in WebSearch or external APIs (Tavily/Serper)
+
+Includes Stage Monitor for tracking reasoning stages:
+- SEARCH: Multiple query search
+- CATEGORIZE: Rate source reliability
+- DETECT: Detect conflicts
+- RESOLVE: Resolve conflicts
+- FINAL: Formulate answer
 """
 
 import json
 import os
+import re
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,35 +28,185 @@ from skill_system import SkillManager
 client = Anthropic()
 
 
-def ask_baseline(question: str, model: str = "claude-sonnet-4-5-20250929") -> str:
-    """Baseline: direct question without search or skills."""
+# =============================================================================
+# STAGE MONITOR: Track reasoning stages in conflicting_info_reasoner flow
+# =============================================================================
+
+def parse_skill_stages(response_text: str) -> dict:
+    """
+    Parse skill response to extract structured reasoning stages.
+
+    Expected stages based on conflicting_info_reasoner skill:
+    - SEARCH: Multiple query search (search findings section)
+    - CATEGORIZE: Rate source reliability (high/medium/low)
+    - DETECT: Detect conflicts (conflicts noted)
+    - RESOLVE: Resolve conflicts (decision made)
+    - FINAL: Formulate answer (conclusion)
+    """
+    stages = {
+        "search": None,       # Search findings
+        "categorize": None,   # Source reliability rating
+        "detect": None,       # Conflict detection
+        "resolve": None,      # Conflict resolution
+        "final": None,        # Final answer
+        "raw": response_text,
+    }
+
+    # Look for search patterns
+    search_patterns = [
+        r'(?:search|found|sources?|results?)\s*(?:indicate|show|suggest)',
+        r'(?:according to|based on)\s+(?:the\s+)?(?:search|sources?)',
+        r'search findings',
+    ]
+    for pattern in search_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            # Extract surrounding context
+            start = max(0, match.start() - 20)
+            end = min(len(response_text), match.end() + 100)
+            stages["search"] = response_text[start:end].strip()[:200]
+            break
+
+    # Look for categorize patterns (reliability rating)
+    categorize_patterns = [
+        r'(?:reliability|credibility|trustworth)\s*[:=]?\s*(?:high|medium|low)',
+        r'(?:official|major news|blog|social media)',
+        r'(?:reliable|unreliable)\s+source',
+    ]
+    for pattern in categorize_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            start = max(0, match.start() - 10)
+            end = min(len(response_text), match.end() + 50)
+            stages["categorize"] = response_text[start:end].strip()[:150]
+            break
+
+    # Look for conflict detection patterns
+    detect_patterns = [
+        r'(?:conflict|contradict|disagree|inconsistent)',
+        r'(?:sources? differ|different (?:sources|information))',
+        r'(?:however|but|although|while).*(?:other|another)\s+source',
+    ]
+    for pattern in detect_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            start = max(0, match.start() - 10)
+            end = min(len(response_text), match.end() + 80)
+            stages["detect"] = response_text[start:end].strip()[:150]
+            break
+
+    # Look for resolve patterns
+    resolve_patterns = [
+        r'(?:therefore|thus|so|hence|conclude)',
+        r'(?:most likely|most reliable|best answer)',
+        r'(?:based on|given|considering)',
+    ]
+    for pattern in resolve_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            start = max(0, match.start() - 10)
+            end = min(len(response_text), match.end() + 80)
+            stages["resolve"] = response_text[start:end].strip()[:150]
+            break
+
+    # Extract final answer (last sentence or explicit answer)
+    final_patterns = [
+        r'(?:the answer is|answer:|in conclusion)\s*(.+?)(?:\.|$)',
+        r'(?:^|\n)([^.]+?)(?:\.|$)\s*$',  # Last sentence
+    ]
+    for pattern in final_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            stages["final"] = match.group(1).strip()[:200] if match.lastindex else match.group(0).strip()[:200]
+            break
+
+    return stages
+
+
+def analyze_stage_metrics(stages: dict) -> dict:
+    """
+    Analyze stage completion metrics for a sample.
+
+    Returns:
+        dict with metrics:
+        - stages_completed: list of completed stages
+        - stages_in_order: bool (whether stages followed expected order)
+        - total_stages: int
+        - stage_completion_rate: float
+    """
+    expected_order = ["search", "categorize", "detect", "resolve", "final"]
+    completed_stages = []
+
+    for stage in expected_order:
+        if stages.get(stage):
+            completed_stages.append(stage)
+
+    # Check if stages are in expected order (strict)
+    stages_in_order = True
+    last_idx = -1
+    for stage in completed_stages:
+        if stage in expected_order:
+            idx = expected_order.index(stage)
+            if idx < last_idx:
+                stages_in_order = False
+                break
+            last_idx = idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+    }
+
+
+# =============================================================================
+# BASELINE AND SKILL FUNCTIONS
+# =============================================================================
+
+def ask_baseline(question: str, model: str = "claude-sonnet-4-5-20250929") -> tuple:
+    """
+    Baseline: direct question without search or skills.
+
+    Returns: (answer, trace_dict)
+    """
     prompt = f"""Answer this question directly and concisely.
 
 Question: {question}
 
 Answer:"""
 
+    start_time = time.time()
     response = client.messages.create(
         model=model,
         max_tokens=500,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
-    return response.content[0].text.strip()
+    duration_ms = int((time.time() - start_time) * 1000)
+    answer = response.content[0].text.strip()
+
+    trace = {
+        "prompt": prompt,
+        "response": answer,
+        "duration_ms": duration_ms,
+    }
+
+    return answer, trace
 
 
 def ask_with_skill(question: str, skill_prompt: str, use_search: bool = True,
-                   search_backend: str = "builtin", model: str = "claude-sonnet-4-5-20250929") -> str:
+                   search_backend: str = "builtin", model: str = "claude-sonnet-4-5-20250929") -> tuple:
     """
     Answer with skill enhancement and optional web search.
 
-    Args:
-        question: The question to answer
-        skill_prompt: System prompt with skill framework
-        use_search: Whether to enable web search
-        search_backend: "builtin", "tavily", or "serper"
-        model: Model to use
+    Returns: (answer, trace_dict with stages)
     """
+    start_time = time.time()
+    full_response_text = ""
+    search_results = None
+
     if use_search and search_backend == "builtin":
         # Use Claude's native web search via tool
         user_prompt = f"""Question: {question}
@@ -56,7 +215,6 @@ Use web search to find current information if needed.
 Follow the reasoning framework in the system prompt.
 Give a direct, concise answer."""
 
-        # Enable web search tool (correct format with name field)
         response = client.messages.create(
             model=model,
             max_tokens=4096,
@@ -75,7 +233,8 @@ Give a direct, concise answer."""
         for block in response.content:
             if hasattr(block, 'text'):
                 answer_parts.append(block.text)
-        return " ".join(answer_parts).strip() if answer_parts else "No answer generated"
+        full_response_text = " ".join(answer_parts).strip()
+        answer = full_response_text if full_response_text else "No answer generated"
 
     elif use_search and search_backend in ["tavily", "serper"]:
         # Use external search API
@@ -100,7 +259,8 @@ Give a direct, concise answer."""
             system=skill_prompt,
             messages=[{"role": "user", "content": user_prompt}]
         )
-        return response.content[0].text.strip()
+        full_response_text = response.content[0].text.strip()
+        answer = full_response_text
 
     else:
         # No search, just skill prompt
@@ -116,8 +276,36 @@ Give a direct, concise answer."""
             system=skill_prompt,
             messages=[{"role": "user", "content": user_prompt}]
         )
-        return response.content[0].text.strip()
+        full_response_text = response.content[0].text.strip()
+        answer = full_response_text
 
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    # Parse stages from response
+    stages = parse_skill_stages(full_response_text)
+    stage_metrics = analyze_stage_metrics(stages)
+
+    trace = {
+        "prompt": user_prompt if 'user_prompt' in dir() else question,
+        "response": full_response_text,
+        "duration_ms": duration_ms,
+        "search_results": search_results,
+        "stages": {
+            "search": stages["search"],
+            "categorize": stages["categorize"],
+            "detect": stages["detect"],
+            "resolve": stages["resolve"],
+            "final": stages["final"],
+        },
+        "stage_metrics": stage_metrics,
+    }
+
+    return answer, trace
+
+
+# =============================================================================
+# BENCHMARK RUNNER
+# =============================================================================
 
 def run_benchmark(source: str = "sample", limit: int = None,
                   use_search: bool = True, search_backend: str = "builtin",
@@ -125,14 +313,6 @@ def run_benchmark(source: str = "sample", limit: int = None,
                   grading_model: str = "claude-sonnet-4-5-20250929"):
     """
     Run benchmark comparing baseline vs skill-enhanced performance.
-
-    Args:
-        source: "sample", "seal_0", "seal_hard", "longseal", or path to file
-        limit: Number of samples to test
-        use_search: Whether to use web search for skill mode
-        search_backend: "builtin", "tavily", or "serper"
-        model: Model for answering questions
-        grading_model: Model for grading answers
     """
     print("=" * 70)
     print("SealQA Skill Benchmark")
@@ -155,6 +335,7 @@ def run_benchmark(source: str = "sample", limit: int = None,
 
     results_baseline = []
     results_skill = []
+    stage_metrics_list = []  # Collect stage metrics for aggregation
 
     print("\n" + "-" * 70)
 
@@ -167,41 +348,64 @@ def run_benchmark(source: str = "sample", limit: int = None,
         print(f"Gold: {gold_answer[:50]}...")
 
         # Baseline (no search, no skills)
+        baseline_trace = None
         try:
-            pred_baseline = ask_baseline(question, model)
+            pred_baseline, baseline_trace = ask_baseline(question, model)
             grade_baseline = grade_answer(question, gold_answer, pred_baseline, grading_model)
             grade_str = {"A": "CORRECT", "B": "INCORRECT", "C": "NOT_ATTEMPTED"}[grade_baseline]
-            print(f"Baseline: {pred_baseline[:50]}... -> {grade_str}")
+            print(f"  [Baseline] {pred_baseline[:50]}... -> {grade_str} ({baseline_trace['duration_ms']}ms)")
         except Exception as e:
             pred_baseline = ""
             grade_baseline = "C"
-            print(f"Baseline: ERROR - {e}")
+            print(f"  [Baseline] ERROR - {e}")
 
         results_baseline.append({
             "id": qid,
             "question": question,
             "answer": gold_answer,
             "prediction": pred_baseline,
-            "grade": grade_baseline
+            "grade": grade_baseline,
+            "trace": baseline_trace,
         })
 
         # With skill (and optionally search)
+        skill_trace = None
         try:
-            pred_skill = ask_with_skill(question, skill_prompt, use_search, search_backend, model)
+            pred_skill, skill_trace = ask_with_skill(question, skill_prompt, use_search, search_backend, model)
             grade_skill = grade_answer(question, gold_answer, pred_skill, grading_model)
             grade_str = {"A": "CORRECT", "B": "INCORRECT", "C": "NOT_ATTEMPTED"}[grade_skill]
-            print(f"Skill:    {pred_skill[:50]}... -> {grade_str}")
+
+            # Print stage info
+            stages = skill_trace.get("stages", {})
+            stage_tags = []
+            if stages.get("search"):
+                stage_tags.append("SEARCH")
+            if stages.get("categorize"):
+                stage_tags.append("CAT")
+            if stages.get("detect"):
+                stage_tags.append("DETECT")
+            if stages.get("resolve"):
+                stage_tags.append("RESOLVE")
+            stage_info = f"[{'/'.join(stage_tags)}]" if stage_tags else ""
+
+            print(f"  [Skill] {pred_skill[:50]}... -> {grade_str} ({skill_trace['duration_ms']}ms) {stage_info}")
+
+            # Collect stage metrics
+            if skill_trace.get("stage_metrics"):
+                stage_metrics_list.append(skill_trace["stage_metrics"])
+
         except Exception as e:
             pred_skill = ""
             grade_skill = "C"
-            print(f"Skill:    ERROR - {e}")
+            print(f"  [Skill] ERROR - {e}")
 
         results_skill.append({
             "id": qid,
             "question": question,
             "answer": gold_answer,
             "prediction": pred_skill,
-            "grade": grade_skill
+            "grade": grade_skill,
+            "trace": skill_trace,
         })
 
     # Calculate metrics
@@ -236,18 +440,60 @@ def run_benchmark(source: str = "sample", limit: int = None,
     improvement = metrics_skill['correct'] - metrics_baseline['correct']
     print(f"\nImprovement: {improvement:+.1%}")
 
+    # Stage Monitor Summary
+    print("\n" + "-" * 40)
+    print("STAGE MONITOR SUMMARY")
+    aggregated_stage_metrics = {}
+    if stage_metrics_list:
+        total = len(stage_metrics_list)
+        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
+        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
+
+        # Count each stage
+        stage_counts = {"search": 0, "categorize": 0, "detect": 0, "resolve": 0, "final": 0}
+        for s in stage_metrics_list:
+            for stage in s.get("stages_completed", []):
+                if stage in stage_counts:
+                    stage_counts[stage] += 1
+
+        aggregated_stage_metrics = {
+            "total_samples": total,
+            "stages_in_order_count": in_order_count,
+            "stages_in_order_rate": in_order_count / total,
+            "avg_completion_rate": avg_completion,
+            "stage_counts": stage_counts,
+            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+        }
+
+        print(f"\n[Skill Mode]")
+        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+        print(f"  Avg completion rate: {avg_completion:.1%}")
+        print(f"  Stage breakdown:")
+        for stage, count in stage_counts.items():
+            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
-        "timestamp": timestamp,
-        "model": model,
-        "source": source,
-        "num_samples": len(samples),
-        "search_enabled": use_search,
-        "search_backend": search_backend,
-        "baseline": {"metrics": metrics_baseline, "results": results_baseline},
-        "skill": {"metrics": metrics_skill, "results": results_skill},
-        "improvement": improvement
+        "meta": {
+            "timestamp": timestamp,
+            "model": model,
+            "source": source,
+            "num_samples": len(samples),
+            "search_enabled": use_search,
+            "search_backend": search_backend,
+            "skills": skill_names,
+        },
+        "metrics": {
+            "baseline": metrics_baseline,
+            "skill": metrics_skill,
+            "improvement": improvement,
+        },
+        "stage_monitor": aggregated_stage_metrics,
+        "traces": {
+            "baseline": results_baseline,
+            "skill": results_skill,
+        },
     }
 
     output_file = f"sealqa_results_{timestamp}.json"
