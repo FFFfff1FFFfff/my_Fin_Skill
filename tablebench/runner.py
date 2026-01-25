@@ -348,6 +348,45 @@ def parse_tcot_stages(response_text: str) -> dict:
     return stages
 
 
+def analyze_stage_metrics(stages: dict) -> dict:
+    """
+    Analyze stage completion metrics for a sample.
+
+    Returns:
+        dict with metrics:
+        - stages_completed: list of completed stages
+        - stages_in_order: bool (whether stages followed expected order)
+        - total_stages: int
+        - stage_completion_rate: float
+    """
+    expected_order = ["parse_table", "understand_question", "extract_data", "calculate", "final_answer"]
+    first_appearance = {}
+
+    for i, stage in enumerate(expected_order):
+        if stages.get(stage):
+            first_appearance[stage] = i
+
+    completed_stages = list(first_appearance.keys())
+
+    # Check if stages are in expected order
+    stages_in_order = True
+    prev_idx = -1
+    for stage in completed_stages:
+        curr_idx = expected_order.index(stage)
+        if curr_idx < prev_idx:
+            stages_in_order = False
+            break
+        prev_idx = curr_idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+    }
+
+
 def extract_answer(text: str) -> str:
     """Extract final answer from response."""
     # Look for "Final Answer:" pattern (official format)
@@ -503,8 +542,17 @@ Question: {question}"""
     full_response = response.content[0].text.strip()
     extracted = extract_answer(full_response)
 
+    # Parse stages and calculate metrics
+    stages = parse_tcot_stages(full_response)
+    stage_metrics = analyze_stage_metrics(stages)
+
     if verbose:
-        print(f" {len(full_response)}c {duration_ms}ms")
+        # Print stage info inline
+        stages_str = "/".join([s.upper()[:3] for s in stage_metrics.get("stages_completed", [])])
+        if stages_str:
+            print(f" {len(full_response)}c {duration_ms}ms [{stages_str}]")
+        else:
+            print(f" {len(full_response)}c {duration_ms}ms")
         # Show brief reasoning trace
         lines = full_response.split('\n')
         for line in lines[:3]:
@@ -520,6 +568,8 @@ Question: {question}"""
         "extracted_answer": extracted,
         "duration_ms": duration_ms,
         "response_length": len(full_response),
+        "stages": {k: v for k, v in stages.items() if k != "raw"},
+        "stage_metrics": stage_metrics,
     }
 
     return extracted, trace
@@ -605,6 +655,7 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
     # Results storage
     results_baseline = []
     results_skill = []
+    stage_metrics_list = []  # Collect stage metrics for aggregation
 
     print("\n" + "-" * 70)
 
@@ -758,6 +809,10 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
                 correct_skill = evaluate_sample(pred_skill, ground_truth, sample_qtype, qsubtype)
                 status = "✓" if correct_skill >= 1.0 else "✗"
                 print(f"    [Skill Result] {pred_skill} {status}")
+
+                # Collect stage metrics
+                if skill_trace and skill_trace.get("stage_metrics"):
+                    stage_metrics_list.append(skill_trace["stage_metrics"])
             except Exception as e:
                 pred_skill = ""
                 correct_skill = 0.0
@@ -805,6 +860,39 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
         print(f"    With Skill: {skill_detail['correct']}/{skill_detail['total']} ({skill_acc:.1%})")
         print(f"    Improvement: {diff:+.1%}")
 
+    # Stage Monitor Summary
+    print("\n" + "-" * 40)
+    print("STAGE MONITOR SUMMARY")
+    aggregated_stage_metrics = {}
+    if stage_metrics_list:
+        total = len(stage_metrics_list)
+        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
+        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
+
+        # Count each stage
+        expected_stages = ["parse_table", "understand_question", "extract_data", "calculate", "final_answer"]
+        stage_counts = {stage: 0 for stage in expected_stages}
+        for s in stage_metrics_list:
+            for stage in s.get("stages_completed", []):
+                if stage in stage_counts:
+                    stage_counts[stage] += 1
+
+        aggregated_stage_metrics = {
+            "total_samples": total,
+            "stages_in_order_count": in_order_count,
+            "stages_in_order_rate": in_order_count / total,
+            "avg_completion_rate": avg_completion,
+            "stage_counts": stage_counts,
+            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+        }
+
+        print(f"\n[Skill Mode - TCoT]")
+        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+        print(f"  Avg completion rate: {avg_completion:.1%}")
+        print(f"  Stage breakdown:")
+        for stage, count in stage_counts.items():
+            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+
     # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
@@ -814,6 +902,7 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
             "source": source,
             "offset": offset,
             "num_samples": len(samples),
+            "skill": "table_reasoning",
         },
         "summary": {
             "baseline": {
@@ -832,6 +921,7 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
             },
             "improvement": improvement,
         },
+        "stage_monitor": aggregated_stage_metrics,
         "traces": {
             "baseline": results_baseline,
             "skill": results_skill,

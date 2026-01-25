@@ -2,11 +2,21 @@
 """
 FinQA benchmark runner: compare baseline vs with-skill performance
 Uses official FinQA evaluation (exact match with 5 decimal precision)
+
+Includes Stage Monitor for tracking reasoning stages:
+- UNDERSTAND: Question type identification
+- LOCATE: Data location in table/text
+- EXTRACT: Data extraction and verification
+- FORMULA: Formula selection
+- CALCULATE: Calculation execution
+- FORMAT: Answer formatting
 """
 
 import json
 import os
+import re
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,8 +29,129 @@ from skill_system import SkillManager
 client = Anthropic()
 
 
-def ask_baseline(question: str, context: str, model: str = "claude-sonnet-4-5-20250929") -> str:
-    """Baseline: direct question without skills. Outputs number only."""
+# =============================================================================
+# STAGE MONITOR: Track reasoning stages in FinQA skill flow
+# =============================================================================
+
+def parse_finqa_stages(response_text: str) -> dict:
+    """
+    Parse FinQA response to extract structured reasoning stages.
+
+    Expected stages based on finqa_reasoning skill:
+    - UNDERSTAND: Question type identification (STEP 1)
+    - LOCATE: Data location (STEP 2)
+    - EXTRACT: Data extraction and verification (STEP 3)
+    - FORMULA: Formula selection (STEP 4)
+    - CALCULATE: Calculation (STEP 5)
+    - FORMAT: Answer formatting (STEP 6)
+    """
+    stages = {
+        "understand": None,    # Question type identification
+        "locate": None,        # Data location
+        "extract": None,       # Data extraction
+        "formula": None,       # Formula selection
+        "calculate": None,     # Calculation
+        "format": None,        # Answer formatting
+        "raw": response_text,
+    }
+
+    # Pattern for STEP markers
+    step_patterns = {
+        "understand": [
+            r'(?:STEP\s*1|Step\s*1)[:\s]*(.+?)(?=STEP\s*2|Step\s*2|$)',
+            r'(?:Question Type|Type of question)[:\s]*(.+?)(?=\n\n|STEP|$)',
+            r'(?:being asked|question asks|identify)[:\s]*(.+?)(?=\n\n|$)',
+        ],
+        "locate": [
+            r'(?:STEP\s*2|Step\s*2)[:\s]*(.+?)(?=STEP\s*3|Step\s*3|$)',
+            r'(?:Locate|Find|Look for)[:\s]*(.+?)(?=\n\n|STEP|$)',
+            r'(?:from the table|in the table|from table)[:\s]*(.+?)(?=\n\n|$)',
+        ],
+        "extract": [
+            r'(?:STEP\s*3|Step\s*3)[:\s]*(.+?)(?=STEP\s*4|Step\s*4|$)',
+            r'(?:Data Point|Extract)[:\s]*(.+?)(?=\n\n|STEP|$)',
+            r'(?:Value|=)\s*[\$]?[\d,]+(?:\.\d+)?',
+        ],
+        "formula": [
+            r'(?:STEP\s*4|Step\s*4)[:\s]*(.+?)(?=STEP\s*5|Step\s*5|$)',
+            r'(?:Formula|Using formula)[:\s]*(.+?)(?=\n\n|STEP|$)',
+            r'(?:percentage change|change|ratio|sum)[:\s]*(.+?)(?=\n|$)',
+        ],
+        "calculate": [
+            r'(?:STEP\s*5|Step\s*5)[:\s]*(.+?)(?=STEP\s*6|Step\s*6|$)',
+            r'(?:Calculate|Calculation|Computing)[:\s]*(.+?)(?=\n\n|STEP|$)',
+            r'(?:=\s*[\d\.\-\+\*/\(\)]+\s*=\s*[\d\.]+)',
+        ],
+        "format": [
+            r'(?:STEP\s*6|Step\s*6)[:\s]*(.+?)(?=Answer|$)',
+            r'(?:Format|Final Answer)[:\s]*(.+?)(?=\n|$)',
+        ],
+    }
+
+    for stage, patterns in step_patterns.items():
+        for pattern in patterns:
+            match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+            if match:
+                content = match.group(1).strip() if match.lastindex else match.group(0).strip()
+                if content and len(content) > 3:
+                    stages[stage] = content[:200]
+                    break
+
+    # Also detect tool usage
+    if "[Tool:" in response_text or "[Tool Call]" in response_text:
+        stages["tool_used"] = True
+
+    return stages
+
+
+def analyze_stage_metrics(stages: dict) -> dict:
+    """
+    Analyze stage completion metrics for a sample.
+
+    Returns:
+        dict with metrics:
+        - stages_completed: list of completed stages
+        - stages_in_order: bool (whether stages followed expected order)
+        - total_stages: int
+        - stage_completion_rate: float
+    """
+    expected_order = ["understand", "locate", "extract", "formula", "calculate", "format"]
+    first_appearance = {}
+
+    # Since FinQA has single response, we check stage presence
+    for i, stage in enumerate(expected_order):
+        if stages.get(stage):
+            first_appearance[stage] = i  # Use order index as "appearance order"
+
+    completed_stages = list(first_appearance.keys())
+
+    # Check if stages are in expected order
+    stages_in_order = True
+    prev_idx = -1
+    for stage in completed_stages:
+        curr_idx = expected_order.index(stage)
+        if curr_idx < prev_idx:
+            stages_in_order = False
+            break
+        prev_idx = curr_idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+        "tool_used": stages.get("tool_used", False),
+    }
+
+
+def ask_baseline(question: str, context: str, model: str = "claude-sonnet-4-5-20250929") -> tuple:
+    """
+    Baseline: direct question without skills. Outputs number only.
+
+    Returns:
+        tuple: (answer, trace_dict)
+    """
     prompt = f"""Answer this financial question.
 
 Data:
@@ -35,13 +166,23 @@ Reply with ONLY the final number (no text, no units, no explanation).
 
 Answer:"""
 
+    start_time = time.time()
     response = client.messages.create(
         model=model,
         max_tokens=20,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
-    return response.content[0].text.strip()
+    duration_ms = int((time.time() - start_time) * 1000)
+    answer = response.content[0].text.strip()
+
+    trace = {
+        "prompt": prompt[:500] + "..." if len(prompt) > 500 else prompt,
+        "response": answer,
+        "duration_ms": duration_ms,
+    }
+
+    return answer, trace
 
 
 def extract_final_answer(text: str) -> str:
@@ -60,13 +201,14 @@ def extract_final_answer(text: str) -> str:
 
 def ask_with_skill(question: str, context: str, skill_manager: SkillManager,
                    skill_names: list[str], model: str = "claude-sonnet-4-5-20250929",
-                   max_turns: int = 5) -> tuple[str, str]:
+                   max_turns: int = 5) -> tuple[str, str, dict]:
     """
     Answer with skill enhancement and optional tool execution.
 
     Returns:
-        tuple: (full_response, final_answer)
+        tuple: (full_response, final_answer, trace_dict)
     """
+    start_time = time.time()
     # Get tool definitions
     tools = skill_manager.get_tools_for_anthropic(skill_names)
 
@@ -140,7 +282,20 @@ Answer: [your final answer here]
                     full_reasoning.append(full_text)
                     final_answer = extract_final_answer(full_text)
                     complete_response = "\n".join(full_reasoning)
-                    return complete_response, final_answer
+                    duration_ms = int((time.time() - start_time) * 1000)
+
+                    # Parse stages and calculate metrics
+                    stages = parse_finqa_stages(complete_response)
+                    stage_metrics = analyze_stage_metrics(stages)
+
+                    trace = {
+                        "prompt": prompt[:500] + "...",
+                        "response": complete_response,
+                        "duration_ms": duration_ms,
+                        "stages": {k: v for k, v in stages.items() if k != "raw"},
+                        "stage_metrics": stage_metrics,
+                    }
+                    return complete_response, final_answer, trace
 
         # Check if Claude wants to use tools
         if response.stop_reason == "tool_use":
@@ -194,7 +349,20 @@ Answer: [your final answer here]
 
     complete_response = "\n".join(full_reasoning)
     final_answer = extract_final_answer(final_text) if final_text else ""
-    return complete_response, final_answer
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    # Parse stages and calculate metrics
+    stages = parse_finqa_stages(complete_response)
+    stage_metrics = analyze_stage_metrics(stages)
+
+    trace = {
+        "prompt": prompt[:500] + "...",
+        "response": complete_response,
+        "duration_ms": duration_ms,
+        "stages": {k: v for k, v in stages.items() if k != "raw"},
+        "stage_metrics": stage_metrics,
+    }
+    return complete_response, final_answer, trace
 
 
 def run_benchmark(source: str = "sample", limit: int = None,
@@ -233,6 +401,7 @@ def run_benchmark(source: str = "sample", limit: int = None,
 
     results_baseline = []
     results_skill = []
+    stage_metrics_list = []  # Collect stage metrics for aggregation
 
     print("\n" + "-" * 70)
 
@@ -246,8 +415,9 @@ def run_benchmark(source: str = "sample", limit: int = None,
         print(f"Gold: {gold_answer}")
 
         # Baseline (no skills)
+        baseline_trace = None
         try:
-            pred_baseline = ask_baseline(question, context, model)
+            pred_baseline, baseline_trace = ask_baseline(question, context, model)
             is_correct = finqa_equal(pred_baseline, gold_answer)
             status = "✓" if is_correct else "✗"
             print(f"Baseline: {pred_baseline} -> {status}")
@@ -261,17 +431,30 @@ def run_benchmark(source: str = "sample", limit: int = None,
             "question": question,
             "prediction": pred_baseline,
             "ground_truth": gold_answer,
-            "correct": is_correct
+            "correct": is_correct,
+            "trace": baseline_trace,
         })
 
         # With skill
+        skill_trace = None
         try:
-            full_response, pred_skill = ask_with_skill(
+            full_response, pred_skill, skill_trace = ask_with_skill(
                 question, context, skill_manager, skill_names, model
             )
             is_correct = finqa_equal(pred_skill, gold_answer)
             status = "✓" if is_correct else "✗"
-            print(f"Skill:    {pred_skill} -> {status}")
+
+            # Print stage info
+            if skill_trace and skill_trace.get("stage_metrics"):
+                metrics = skill_trace["stage_metrics"]
+                stages_str = "/".join([s.upper()[:3] for s in metrics.get("stages_completed", [])])
+                if stages_str:
+                    print(f"Skill:    {pred_skill} -> {status} [{stages_str}]")
+                else:
+                    print(f"Skill:    {pred_skill} -> {status}")
+                stage_metrics_list.append(metrics)
+            else:
+                print(f"Skill:    {pred_skill} -> {status}")
         except Exception as e:
             pred_skill = ""
             full_response = ""
@@ -284,7 +467,8 @@ def run_benchmark(source: str = "sample", limit: int = None,
             "full_response": full_response,
             "prediction": pred_skill,
             "ground_truth": gold_answer,
-            "correct": is_correct
+            "correct": is_correct,
+            "trace": skill_trace,
         })
 
     # Calculate metrics
@@ -314,16 +498,63 @@ def run_benchmark(source: str = "sample", limit: int = None,
     improvement = metrics_skill['accuracy'] - metrics_baseline['accuracy']
     print(f"\nImprovement: {improvement:+.1%}")
 
+    # Stage Monitor Summary
+    print("\n" + "-" * 40)
+    print("STAGE MONITOR SUMMARY")
+    aggregated_stage_metrics = {}
+    if stage_metrics_list:
+        total = len(stage_metrics_list)
+        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
+        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
+        tool_used_count = sum(1 for s in stage_metrics_list if s.get("tool_used", False))
+
+        # Count each stage
+        expected_stages = ["understand", "locate", "extract", "formula", "calculate", "format"]
+        stage_counts = {stage: 0 for stage in expected_stages}
+        for s in stage_metrics_list:
+            for stage in s.get("stages_completed", []):
+                if stage in stage_counts:
+                    stage_counts[stage] += 1
+
+        aggregated_stage_metrics = {
+            "total_samples": total,
+            "stages_in_order_count": in_order_count,
+            "stages_in_order_rate": in_order_count / total,
+            "avg_completion_rate": avg_completion,
+            "tool_used_count": tool_used_count,
+            "tool_used_rate": tool_used_count / total,
+            "stage_counts": stage_counts,
+            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+        }
+
+        print(f"\n[Skill Mode]")
+        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+        print(f"  Avg completion rate: {avg_completion:.1%}")
+        print(f"  Tool usage: {tool_used_count}/{total} ({tool_used_count/total:.1%})")
+        print(f"  Stage breakdown:")
+        for stage, count in stage_counts.items():
+            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
-        "timestamp": timestamp,
-        "model": model,
-        "source": source,
-        "num_samples": len(samples),
-        "baseline": {"metrics": metrics_baseline, "results": results_baseline},
-        "skill": {"metrics": metrics_skill, "results": results_skill},
-        "improvement": improvement
+        "meta": {
+            "timestamp": timestamp,
+            "model": model,
+            "source": source,
+            "num_samples": len(samples),
+            "skills": skill_names,
+        },
+        "metrics": {
+            "baseline": metrics_baseline,
+            "skill": metrics_skill,
+            "improvement": improvement,
+        },
+        "stage_monitor": aggregated_stage_metrics,
+        "traces": {
+            "baseline": results_baseline,
+            "skill": results_skill,
+        },
     }
 
     output_file = f"finqa_results_{timestamp}.json"

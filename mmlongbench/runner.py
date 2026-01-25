@@ -2,11 +2,19 @@
 """
 MMLongBench-Doc benchmark runner: compare baseline vs with-skill performance
 PDF document understanding and QA benchmark
+
+Includes Stage Monitor for tracking reasoning stages:
+- UNDERSTAND: Question comprehension
+- LOCATE: Evidence location in document
+- EXTRACT: Information extraction
+- ANSWER: Answer formulation
 """
 
 import json
 import os
+import re
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +23,101 @@ from anthropic import Anthropic
 from data_loader import load_mmlongbench, load_sample_data, download_pdf, pdf_to_base64, pdf_to_images, PDF_CACHE_DIR
 from evaluator import eval_score, evaluate_batch
 from skill_system import SkillManager
+
+
+# =============================================================================
+# STAGE MONITOR: Track reasoning stages in PDF Document QA flow
+# =============================================================================
+
+def parse_pdf_stages(response_text: str) -> dict:
+    """
+    Parse PDF QA response to extract structured reasoning stages.
+
+    Expected stages based on pdf_document_qa skill:
+    - UNDERSTAND: Question comprehension (what, where, format)
+    - LOCATE: Evidence location (page, section, element)
+    - EXTRACT: Information extraction (from text, table, chart)
+    - ANSWER: Answer formulation
+    """
+    stages = {
+        "understand": None,    # Question comprehension
+        "locate": None,        # Evidence location
+        "extract": None,       # Information extraction
+        "answer": None,        # Answer formulation
+        "raw": response_text,
+    }
+
+    # Pattern matching for stages
+    step_patterns = {
+        "understand": [
+            r'(?:STEP\s*1|Step\s*1)[:\s]*(.+?)(?=STEP\s*2|Step\s*2|$)',
+            r'(?:question asks|being asked|looking for)[:\s]*(.+?)(?=\n\n|$)',
+            r'(?:understand|comprehend|identify)[:\s]*(.+?)(?=\n\n|$)',
+        ],
+        "locate": [
+            r'(?:STEP\s*2|Step\s*2)[:\s]*(.+?)(?=STEP\s*3|Step\s*3|$)',
+            r'(?:page\s*\d+|section|found in|located)[:\s]*(.+?)(?=\n\n|$)',
+            r'(?:evidence|source|reference)[:\s]*(.+?)(?=\n\n|$)',
+        ],
+        "extract": [
+            r'(?:STEP\s*3|Step\s*3)[:\s]*(.+?)(?=STEP\s*4|Step\s*4|$)',
+            r'(?:extract|value is|data shows)[:\s]*(.+?)(?=\n\n|$)',
+            r'(?:from the (?:table|chart|figure|text))[:\s]*(.+?)(?=\n\n|$)',
+        ],
+        "answer": [
+            r'(?:STEP\s*4|Step\s*4)[:\s]*(.+?)(?=Final|Answer|$)',
+            r'(?:Final Answer|Answer)[:\s]*(.+?)(?:\n|$)',
+            r'(?:therefore|thus|the answer is)[:\s]*(.+?)(?:\n|$)',
+        ],
+    }
+
+    for stage, patterns in step_patterns.items():
+        for pattern in patterns:
+            match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+            if match:
+                content = match.group(1).strip() if match.lastindex else match.group(0).strip()
+                if content and len(content) > 3:
+                    stages[stage] = content[:200]
+                    break
+
+    # Check for keyword search usage
+    if "keyword" in response_text.lower() or "search" in response_text.lower():
+        stages["keyword_search_used"] = True
+
+    return stages
+
+
+def analyze_stage_metrics(stages: dict) -> dict:
+    """
+    Analyze stage completion metrics for a sample.
+    """
+    expected_order = ["understand", "locate", "extract", "answer"]
+    first_appearance = {}
+
+    for i, stage in enumerate(expected_order):
+        if stages.get(stage):
+            first_appearance[stage] = i
+
+    completed_stages = list(first_appearance.keys())
+
+    # Check if stages are in expected order
+    stages_in_order = True
+    prev_idx = -1
+    for stage in completed_stages:
+        curr_idx = expected_order.index(stage)
+        if curr_idx < prev_idx:
+            stages_in_order = False
+            break
+        prev_idx = curr_idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+        "keyword_search_used": stages.get("keyword_search_used", False),
+    }
 
 # Import PDF text extraction tools
 try:
@@ -132,7 +235,7 @@ def create_images_message(page_images: list[dict], question: str, system_prompt:
 def ask_baseline(doc_content: any, question: str, answer_format: str,
                  model: str = "claude-sonnet-4-5-20250929",
                  use_images: bool = False,
-                 use_gpt_extraction: bool = False) -> tuple[str, str]:
+                 use_gpt_extraction: bool = False) -> tuple[str, str, dict]:
     """
     Baseline: direct question without skills.
 
@@ -145,8 +248,10 @@ def ask_baseline(doc_content: any, question: str, answer_format: str,
         use_gpt_extraction: If True, use GPT-4o to extract answer from response
 
     Returns:
-        tuple: (raw_response, extracted_answer)
+        tuple: (raw_response, extracted_answer, trace_dict)
     """
+    start_time = time.time()
+
     # Allow free-form response when using GPT extraction
     if use_gpt_extraction:
         prompt = f"""Based on the document above, answer the following question.
@@ -183,24 +288,28 @@ Final Answer:"""
         messages=msg_data["messages"]
     )
 
+    duration_ms = int((time.time() - start_time) * 1000)
     raw = response.content[0].text.strip()
 
     # Extract answer
     if use_gpt_extraction and HAS_OPENAI:
         extracted = extract_answer_with_gpt(question, raw)
         if extracted:
-            return raw, extracted
+            trace = {"prompt": prompt[:300], "response": raw, "duration_ms": duration_ms}
+            return raw, extracted, trace
 
     # Fallback: simple extraction
     lines = raw.split('\n')
-    return raw, lines[0].strip()
+    extracted = lines[0].strip()
+    trace = {"prompt": prompt[:300], "response": raw, "duration_ms": duration_ms}
+    return raw, extracted, trace
 
 
 def ask_with_skill(doc_content: any, question: str, answer_format: str,
                    skill_prompt: str, model: str = "claude-sonnet-4-5-20250929",
                    extracted_text: dict = None,
                    use_images: bool = False,
-                   use_gpt_extraction: bool = False) -> tuple[str, str]:
+                   use_gpt_extraction: bool = False) -> tuple[str, str, dict]:
     """
     Answer with skill enhancement, optionally including extracted text.
 
@@ -210,8 +319,9 @@ def ask_with_skill(doc_content: any, question: str, answer_format: str,
         use_gpt_extraction: If True, use GPT-4o to extract answer
 
     Returns:
-        tuple: (full_response, extracted_answer)
+        tuple: (full_response, extracted_answer, trace_dict)
     """
+    start_time = time.time()
     format_hint = {
         "Int": "The answer should be an integer number.",
         "Float": "The answer should be a number (can include decimals).",
@@ -287,15 +397,27 @@ If information is not in the document, state "Not answerable"."""
     )
 
     full_response = response.content[0].text.strip()
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    # Parse stages and calculate metrics
+    stages = parse_pdf_stages(full_response)
+    stage_metrics = analyze_stage_metrics(stages)
 
     # Extract answer
     if use_gpt_extraction and HAS_OPENAI:
         extracted = extract_answer_with_gpt(question, full_response)
         if extracted:
-            return full_response, extracted
+            trace = {
+                "prompt": prompt[:300],
+                "response": full_response,
+                "duration_ms": duration_ms,
+                "keyword_search_used": bool(text_context),
+                "stages": {k: v for k, v in stages.items() if k != "raw"},
+                "stage_metrics": stage_metrics,
+            }
+            return full_response, extracted, trace
 
     # Fallback: regex extraction
-    import re
     match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', full_response, re.IGNORECASE | re.DOTALL)
     if match:
         extracted = match.group(1).strip()
@@ -304,7 +426,15 @@ If information is not in the document, state "Not answerable"."""
         lines = [l.strip() for l in full_response.split('\n') if l.strip()]
         extracted = lines[-1] if lines else full_response
 
-    return full_response, extracted
+    trace = {
+        "prompt": prompt[:300],
+        "response": full_response,
+        "duration_ms": duration_ms,
+        "keyword_search_used": bool(text_context),
+        "stages": {k: v for k, v in stages.items() if k != "raw"},
+        "stage_metrics": stage_metrics,
+    }
+    return full_response, extracted, trace
 
 
 def run_benchmark(limit: int = None,
@@ -426,6 +556,7 @@ def run_benchmark(limit: int = None,
 
     results_baseline = []
     results_skill = []
+    stage_metrics_list = []  # Collect stage metrics for aggregation
 
     print("\n" + "-" * 70)
 
@@ -442,8 +573,9 @@ def run_benchmark(limit: int = None,
         doc_content = doc_cache[doc_id]
 
         # Baseline
+        baseline_trace = None
         try:
-            raw_response, pred_baseline = ask_baseline(
+            raw_response, pred_baseline, baseline_trace = ask_baseline(
                 doc_content, question, answer_format, model,
                 use_images=use_images, use_gpt_extraction=use_gpt_extraction
             )
@@ -461,20 +593,33 @@ def run_benchmark(limit: int = None,
             "ground_truth": answer,
             "answer_format": answer_format,
             "prediction": pred_baseline,
-            "score": score_baseline
+            "score": score_baseline,
+            "trace": baseline_trace,
         })
 
         # With skill (if available)
         if skill_prompt:
+            skill_trace = None
             try:
                 extracted_text = text_cache.get(doc_id)
-                full_response, pred_skill = ask_with_skill(
+                full_response, pred_skill, skill_trace = ask_with_skill(
                     doc_content, question, answer_format, skill_prompt, model,
                     extracted_text=extracted_text,
                     use_images=use_images, use_gpt_extraction=use_gpt_extraction
                 )
                 score_skill = eval_score(pred_skill, answer, answer_format)
-                print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f}")
+
+                # Print stage info
+                if skill_trace and skill_trace.get("stage_metrics"):
+                    metrics = skill_trace["stage_metrics"]
+                    stages_str = "/".join([s.upper()[:3] for s in metrics.get("stages_completed", [])])
+                    if stages_str:
+                        print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f} [{stages_str}]")
+                    else:
+                        print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f}")
+                    stage_metrics_list.append(metrics)
+                else:
+                    print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f}")
             except Exception as e:
                 pred_skill = ""
                 full_response = ""
@@ -489,7 +634,8 @@ def run_benchmark(limit: int = None,
                 "answer_format": answer_format,
                 "full_response": full_response,
                 "prediction": pred_skill,
-                "score": score_skill
+                "score": score_skill,
+                "trace": skill_trace,
             })
 
     # Separate results into all vs answerable-only
@@ -543,17 +689,56 @@ def run_benchmark(limit: int = None,
             improvement_ans = eval_skill_ans['accuracy'] - eval_baseline_ans['accuracy']
             print(f"\n  Improvement: {improvement_ans:+.1%}")
 
+    # Stage Monitor Summary
+    print("\n" + "-" * 40)
+    print("STAGE MONITOR SUMMARY")
+    aggregated_stage_metrics = {}
+    if stage_metrics_list:
+        total = len(stage_metrics_list)
+        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
+        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
+        keyword_search_count = sum(1 for s in stage_metrics_list if s.get("keyword_search_used", False))
+
+        # Count each stage
+        expected_stages = ["understand", "locate", "extract", "answer"]
+        stage_counts = {stage: 0 for stage in expected_stages}
+        for s in stage_metrics_list:
+            for stage in s.get("stages_completed", []):
+                if stage in stage_counts:
+                    stage_counts[stage] += 1
+
+        aggregated_stage_metrics = {
+            "total_samples": total,
+            "stages_in_order_count": in_order_count,
+            "stages_in_order_rate": in_order_count / total,
+            "avg_completion_rate": avg_completion,
+            "keyword_search_count": keyword_search_count,
+            "keyword_search_rate": keyword_search_count / total,
+            "stage_counts": stage_counts,
+            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+        }
+
+        print(f"\n[Skill Mode]")
+        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+        print(f"  Avg completion rate: {avg_completion:.1%}")
+        print(f"  Keyword search used: {keyword_search_count}/{total} ({keyword_search_count/total:.1%})")
+        print(f"  Stage breakdown:")
+        for stage, count in stage_counts.items():
+            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
-        "timestamp": timestamp,
-        "model": model,
-        "num_samples": len(samples),
-        "num_unanswerable": num_unanswerable,
+        "meta": {
+            "timestamp": timestamp,
+            "model": model,
+            "num_samples": len(samples),
+            "num_unanswerable": num_unanswerable,
+            "skills": active_skills,
+        },
         "all_questions": {
             "baseline": {
                 "accuracy": eval_baseline_all['accuracy'],
-                "results": results_baseline
             }
         },
         "answerable_only": {
@@ -561,13 +746,17 @@ def run_benchmark(limit: int = None,
             "baseline": {
                 "accuracy": eval_baseline_ans['accuracy'] if eval_baseline_ans else 0
             }
-        }
+        },
+        "stage_monitor": aggregated_stage_metrics,
+        "traces": {
+            "baseline": results_baseline,
+            "skill": results_skill,
+        },
     }
 
     if eval_skill_all:
         output["all_questions"]["skill"] = {
             "accuracy": eval_skill_all['accuracy'],
-            "results": results_skill
         }
         output["all_questions"]["improvement"] = eval_skill_all['accuracy'] - eval_baseline_all['accuracy']
 
