@@ -3,6 +3,7 @@
 ChartQAPro benchmark runner: compare baseline vs with-skill performance
 Chart Question Answering with visual and logical reasoning
 
+Uses official ChartQAPro paper prompt templates (Table 6 & 7)
 Skill approach: Chain-of-Thought (CoT) with structured output
 Based on paper findings: CoT > PoT > Direct for closed-source models
 """
@@ -24,6 +25,176 @@ client = Anthropic()
 
 
 # =============================================================================
+# OFFICIAL PROMPT TEMPLATES FROM ChartQAPro PAPER (Table 6 & 7)
+# =============================================================================
+
+# Direct setup prompts (Table 6)
+DIRECT_PROMPTS = {
+    "Factoid": """You are given a factoid question that you need to answer based on the provided image.
+Your answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
+If there are multiple answers, put them in brackets using this format ['Answer1', 'Answer2'].
+Remember to generate the final answer only without any additional text!
+
+STRICT FORMAT RULES:
+- Output ONLY the answer, nothing else
+- For years: use exact format shown in chart (e.g., "2020" not "2020年")
+- For numbers: no units unless shown in chart (e.g., "50" not "50 million")
+- For percentages: match chart format (e.g., "25" or "25%")
+
+Question: {question}""",
+
+    "Multi Choice": """You are given a question along with different possible answers. You need to select the correct answer from them based on the provided image.
+Your answer should be one of the options letters only: a, b, c or d (just the letter itself without any additional text). If the question is unanswerable based on the information in the provided image, your answer should be unanswerable.
+If there are multiple answers, put them in brackets using this format ['Answer1', 'Answer2'].
+Remember to generate the final answer only without any additional text!
+
+STRICT FORMAT RULES:
+- Output ONLY a single lowercase letter: a, b, c, or d
+- No periods, no explanations, no "Option" prefix
+- Example correct output: a
+- Example wrong output: "a.", "Option a", "The answer is a"
+
+Question: {question}""",
+
+    "Hypothetical": """You are given a hypothetical question that you need to answer based on the provided image.
+Your answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
+If there are multiple answers, put them in brackets using this format ['Answer1', 'Answer2'].
+Remember to generate the final answer only without any additional text!
+
+STRICT FORMAT RULES:
+- Output ONLY the answer, nothing else
+- For numbers: no units unless shown in chart
+- Be precise and concise
+
+Question: {question}""",
+
+    "Fact Checking": """You are given a fact statement that you need to assess based on the provided image.
+Your answer should be either true or false (without any additional text). If the question is unanswerable based on the information in the provided image, your answer should be unanswerable.
+If there are multiple answers, put them in brackets using this format ['Answer1', 'Answer2'].
+Remember to generate the final answer only without any additional text!
+
+STRICT FORMAT RULES:
+- Output ONLY: true OR false (lowercase)
+- No periods, no explanations
+- Example correct: true
+- Example wrong: "True", "TRUE", "true.", "The statement is true"
+
+Question: {question}""",
+
+    "Conversational": """You are given a multi-turn conversation, and your job is to answer the final question based on the conversation history and the information in the provided image.
+Your answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
+If there are multiple answers, put them in brackets using this format ['Answer1', 'Answer2'].
+Remember to generate the final answer only without any additional text!
+
+STRICT FORMAT RULES:
+- Output ONLY the answer, nothing else
+- For numbers: no units unless shown in chart
+- Be precise and concise
+
+{conversation}
+Question: {question}""",
+}
+
+# Chain of Thought prompts (Table 7)
+COT_PROMPTS = {
+    "Factoid": """You are given a factoid question that you need to answer based on the provided image.
+You need to think step-by-step, but your final answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
+If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
+
+STRICT REASONING FORMAT:
+Think step-by-step using these stages:
+1. [UNDERSTAND]: What is the question asking?
+2. [LOCATE]: Where in the chart is the relevant data?
+3. [READ]: What are the exact values from the chart?
+4. [CALCULATE]: Any calculations needed? (show work)
+5. [VERIFY]: Does the answer make sense?
+
+STRICT ANSWER FORMAT:
+- End with exactly: "The answer is X"
+- X should be ONLY the answer (no units unless in chart)
+- For years: exact format from chart
+- For numbers: no extra units
+
+Question: {question}""",
+
+    "Multi Choice": """You are given a question along with different possible answers. You need to select the correct answer from them based on the provided image.
+You need to think step-by-step, but your final answer should be one of the options letters only: a, b, c or d (just the letter itself without any additional text). If the question is unanswerable based on the information in the provided image, your answer should be unanswerable.
+If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
+
+STRICT REASONING FORMAT:
+Think step-by-step using these stages:
+1. [UNDERSTAND]: What is the question asking?
+2. [LOCATE]: Where in the chart is the relevant data?
+3. [READ]: What are the exact values?
+4. [EVALUATE]: Check each option against the data
+5. [VERIFY]: Confirm the selected option
+
+STRICT ANSWER FORMAT:
+- End with exactly: "The answer is X"
+- X must be ONLY a single lowercase letter: a, b, c, or d
+- Example: "The answer is b"
+
+Question: {question}""",
+
+    "Hypothetical": """You are given a hypothetical question that you need to answer based on the provided image.
+You need to think step-by-step, but your final answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
+If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
+
+STRICT REASONING FORMAT:
+Think step-by-step using these stages:
+1. [UNDERSTAND]: What hypothetical scenario is being asked?
+2. [LOCATE]: Where is the relevant baseline data?
+3. [READ]: What are the current values?
+4. [CALCULATE]: Apply the hypothetical change
+5. [VERIFY]: Is the result reasonable?
+
+STRICT ANSWER FORMAT:
+- End with exactly: "The answer is X"
+- X should be ONLY the answer
+
+Question: {question}""",
+
+    "Fact Checking": """You are given a fact statement that you need to assess based on the information in the provided image.
+You need to think step-by-step, but your final answer should be either true or false (without any additional text). If the question is unanswerable based on the information in the provided image, your answer should be unanswerable.
+If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
+
+STRICT REASONING FORMAT:
+Think step-by-step using these stages:
+1. [UNDERSTAND]: What claim is being made?
+2. [LOCATE]: Where is the relevant data in the chart?
+3. [READ]: What are the actual values?
+4. [COMPARE]: Does the data support or refute the claim?
+5. [VERIFY]: Double-check the conclusion
+
+STRICT ANSWER FORMAT:
+- End with exactly: "The answer is X"
+- X must be ONLY: true OR false (lowercase)
+- Example: "The answer is true"
+
+Question: {question}""",
+
+    "Conversational": """You are given a multi-turn conversation, and your job is to answer the final question based on the conversation history and the information in the provided image.
+You need to think step-by-step, but your final answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
+If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
+
+STRICT REASONING FORMAT:
+Think step-by-step using these stages:
+1. [CONTEXT]: What was discussed in previous turns?
+2. [UNDERSTAND]: What is the current question asking?
+3. [LOCATE]: Where is the relevant data?
+4. [READ]: What are the exact values?
+5. [VERIFY]: Does this follow logically from the conversation?
+
+STRICT ANSWER FORMAT:
+- End with exactly: "The answer is X"
+- X should be ONLY the answer
+
+{conversation}
+Question: {question}""",
+}
+
+
+# =============================================================================
 # STAGE PARSING: Extract structured reasoning stages from CoT response
 # =============================================================================
 
@@ -31,56 +202,58 @@ def parse_cot_stages(response_text: str) -> dict:
     """
     Parse CoT response to extract structured reasoning stages.
 
-    Expected format in response:
-    [DATA]: ...
+    Expected format in response (using official paper + stage markers):
+    [UNDERSTAND]: ...
+    [LOCATE]: ...
     [READ]: ...
-    [CALC]: ...
+    [CALCULATE]/[EVALUATE]/[COMPARE]: ...
     [VERIFY]: ...
-    Final Answer: ...
+    The answer is ...
     """
     stages = {
-        "data": None,      # What data is needed
-        "read": None,      # Values read from chart
-        "calc": None,      # Calculation/reasoning
-        "verify": None,    # Verification
-        "final": None,     # Final answer
-        "raw": response_text,  # Full response for debugging
+        "understand": None,   # What is the question asking
+        "locate": None,       # Where in chart is data
+        "read": None,         # Exact values read
+        "calculate": None,    # Calculation/evaluation/comparison
+        "verify": None,       # Verification
+        "final": None,        # Final answer
+        "raw": response_text, # Full response for debugging
     }
 
     # Extract each stage using regex
     patterns = {
-        "data": r'\[DATA\]:\s*(.+?)(?=\[READ\]|\[CALC\]|\[VERIFY\]|Final Answer:|$)',
-        "read": r'\[READ\]:\s*(.+?)(?=\[CALC\]|\[VERIFY\]|Final Answer:|$)',
-        "calc": r'\[CALC\]:\s*(.+?)(?=\[VERIFY\]|Final Answer:|$)',
-        "verify": r'\[VERIFY\]:\s*(.+?)(?=Final Answer:|$)',
-        "final": r'Final Answer:\s*(.+?)(?:\n|$)',
+        "understand": r'\[UNDERSTAND\]:\s*(.+?)(?=\[LOCATE\]|\[READ\]|\[CALC|\[EVAL|\[COMP|\[VERIFY\]|\[CONTEXT\]|The answer is|$)',
+        "locate": r'\[LOCATE\]:\s*(.+?)(?=\[READ\]|\[CALC|\[EVAL|\[COMP|\[VERIFY\]|The answer is|$)',
+        "read": r'\[READ\]:\s*(.+?)(?=\[CALC|\[EVAL|\[COMP|\[VERIFY\]|The answer is|$)',
+        "calculate": r'\[(?:CALCULATE|EVALUATE|COMPARE)\]:\s*(.+?)(?=\[VERIFY\]|The answer is|$)',
+        "verify": r'\[VERIFY\]:\s*(.+?)(?=The answer is|$)',
+        "final": r'The answer is\s+(.+?)(?:\.|$)',
     }
 
     for stage, pattern in patterns.items():
         match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
         if match:
             content = match.group(1).strip()
-            # Filter out cases where LLM repeated the prompt question
-            if content and not content.startswith("What specific data") and \
-               not content.startswith("List the actual") and \
-               not content.startswith("Show any calculation") and \
-               not content.startswith("Quick sanity"):
+            if content:
                 stages[stage] = content
 
-    # More robust Final Answer extraction
+    # Also try to capture context stage for conversational
+    context_match = re.search(r'\[CONTEXT\]:\s*(.+?)(?=\[UNDERSTAND\]|$)', response_text, re.DOTALL | re.IGNORECASE)
+    if context_match:
+        stages["context"] = context_match.group(1).strip()
+
+    # More robust Final Answer extraction if not found
     if not stages["final"]:
-        # Try alternative patterns
         alt_patterns = [
-            r'Final Answer:\s*\*?\*?(.+?)\*?\*?\s*$',  # Handle **answer**
-            r'(?:The answer is|Answer:)\s*(.+?)(?:\n|$)',
-            r'\n([A-D])\s*$',  # Single letter at end for multi-choice
-            r'\n(True|False)\s*$',  # True/False at end
-            r'\n(\d+(?:\.\d+)?)\s*$',  # Number at end
+            r'The answer is\s*[:\s]*(.+?)(?:\.|,|\n|$)',
+            r'(?:^|\n)\s*([a-d])\s*$',  # Single letter at end for multi-choice
+            r'(?:^|\n)\s*(true|false)\s*$',  # True/False at end
+            r"(?:^|\n)\s*\[?'?([^'[\]]+)'?\]?\s*$",  # Last line as answer
         ]
         for pat in alt_patterns:
             match = re.search(pat, response_text, re.IGNORECASE | re.MULTILINE)
             if match:
-                stages["final"] = match.group(1).strip().strip('*').strip()
+                stages["final"] = match.group(1).strip().strip("'\"").strip()
                 break
 
     return stages
@@ -97,7 +270,8 @@ def analyze_stage_metrics(stages: dict) -> dict:
         - total_stages: int
         - stage_completion_rate: float
     """
-    expected_order = ["data", "read", "calc", "verify", "final"]
+    # Updated stage order matching new CoT format
+    expected_order = ["understand", "locate", "read", "calculate", "verify", "final"]
     first_appearance = {}
 
     for i, stage in enumerate(expected_order):
@@ -136,98 +310,124 @@ def create_image_message(image_base64: str, text: str) -> list:
     }]
 
 
-def extract_final_answer(text: str) -> str:
-    """Extract answer from 'Final Answer: xxx' format and clean it."""
-    # Try to find "Final Answer:" pattern
-    match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+def extract_final_answer(text: str, question_type: str = None) -> str:
+    """
+    Extract answer from 'The answer is X' format (official paper format) and clean it.
+
+    Args:
+        text: Response text from LLM
+        question_type: Type of question for format-specific extraction
+    """
+    answer = None
+
+    # Primary: Official paper format "The answer is X"
+    match = re.search(r'The answer is\s+(.+?)(?:\.|,|\n|$)', text, re.IGNORECASE)
     if match:
         answer = match.group(1).strip()
-    else:
+
+    # Fallback patterns
+    if not answer:
+        # Try "Final Answer:" pattern
+        match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+        if match:
+            answer = match.group(1).strip()
+
+    if not answer:
         # Fallback: take last non-empty line
         lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
         answer = lines[-1] if lines else text.strip()
 
     # Clean up common prefixes
-    for prefix in ["Answer:", "The answer is", "A:", "**", "answer:"]:
+    for prefix in ["Answer:", "The answer is", "A:", "**", "answer:", "="]:
         if answer.lower().startswith(prefix.lower()):
             answer = answer[len(prefix):].strip()
 
     # Remove trailing markers
-    answer = answer.rstrip('*').rstrip('.').strip()
+    answer = answer.rstrip('*').rstrip('.').rstrip(',').strip()
 
-    # Strip common unit suffixes and parenthetical notes
-    # e.g., "40 players" -> "40", "9070.001 PKR in Million" -> "9070.001"
-    answer = re.sub(r'\s*\([^)]*\)\s*$', '', answer)  # Remove trailing (...)
-    answer = re.sub(r'\s+(players?|years?|times?|points?|percentage points?|percent|%|dollars?|million|billion|PKR|USD|EUR|GBP|in Million|in Billion)\s*$', '', answer, flags=re.IGNORECASE)
+    # Question-type specific cleaning
+    if question_type == "Multi Choice":
+        # Extract just the letter for multi-choice
+        letter_match = re.search(r'^([a-dA-D])(?:\s|$|\)|\.|,)', answer)
+        if letter_match:
+            answer = letter_match.group(1).lower()
+        elif answer.lower() in ['a', 'b', 'c', 'd']:
+            answer = answer.lower()
 
-    # If answer starts with a description, try to extract just the value
-    # e.g., "Rest of Ontario has the highest..." -> "Rest of Ontario"
-    if ' has ' in answer.lower() or ' is ' in answer.lower() or ' shows ' in answer.lower():
-        # Try to get text before "has/is/shows"
-        for sep in [' has ', ' is ', ' shows ', ' had ', ' was ']:
-            if sep in answer.lower():
-                idx = answer.lower().find(sep)
-                potential = answer[:idx].strip()
-                if potential:
-                    answer = potential
-                    break
+    elif question_type == "Fact Checking":
+        # Normalize true/false
+        if answer.lower() in ['true', 'false']:
+            answer = answer.lower()
+        elif 'true' in answer.lower():
+            answer = 'true'
+        elif 'false' in answer.lower():
+            answer = 'false'
+
+    # Strip common unit suffixes and parenthetical notes (for other types)
+    if question_type not in ["Multi Choice", "Fact Checking"]:
+        answer = re.sub(r'\s*\([^)]*\)\s*$', '', answer)  # Remove trailing (...)
+        answer = re.sub(r'\s+(players?|years?|times?|points?|percentage points?|percent|%|dollars?|million|billion|PKR|USD|EUR|GBP|in Million|in Billion)\s*$', '', answer, flags=re.IGNORECASE)
+
+        # If answer starts with a description, try to extract just the value
+        if ' has ' in answer.lower() or ' is ' in answer.lower() or ' shows ' in answer.lower():
+            for sep in [' has ', ' is ', ' shows ', ' had ', ' was ']:
+                if sep in answer.lower():
+                    idx = answer.lower().find(sep)
+                    potential = answer[:idx].strip()
+                    if potential:
+                        answer = potential
+                        break
 
     return answer.strip()
 
 
 # =============================================================================
-# BASELINE: Direct question answering (no CoT)
+# BASELINE: Direct question answering (no CoT) - Using Official Paper Templates
 # =============================================================================
 
 def ask_baseline(image_base64: str, questions: list, question_type: str,
                  model: str = "claude-sonnet-4-5-20250929",
                  verbose: bool = True) -> tuple:
     """
-    Baseline: direct questions without CoT.
+    Baseline: direct questions without CoT using official paper prompts (Table 6).
 
     Returns:
         tuple: (answers_list, trace_list) where trace contains call info
     """
-    format_hints = {
-        "Fact Checking": "Output ONLY 'True' or 'False'.",
-        "Multi Choice": "Output ONLY the letter (A, B, C, or D).",
-        "Reasoning": "Output ONLY the number or value.",
-        "Hypothetical": "Output ONLY the short answer.",
-        "Conversational": "Output ONLY the short answer.",
-    }
-
     answers = []
     traces = []
     conversation_history = []
 
     for q_idx, question in enumerate(questions):
-        hint = format_hints.get(question_type, "Output ONLY the answer.")
-        context = ""
+        # Get official prompt template
+        template_key = question_type if question_type in DIRECT_PROMPTS else "Factoid"
+        template = DIRECT_PROMPTS[template_key]
+
+        # Build conversation context for conversational questions
+        conversation_str = ""
         if question_type == "Conversational" and conversation_history:
-            context = "Previous:\n" + "\n".join(f"Q: {q}\nA: {a}" for q, a in conversation_history) + "\n\n"
+            conversation_str = "Conversation:\n" + "\n".join(
+                f"Q{i+1}: {q}\nA{i+1}: {a}" for i, (q, a) in enumerate(conversation_history)
+            ) + "\n"
 
-        prompt = f"""{context}Question: {question}
-
-{hint} No explanation.
-
-Answer:"""
+        # Format the prompt
+        if question_type == "Conversational":
+            prompt = template.format(conversation=conversation_str, question=question)
+        else:
+            prompt = template.format(question=question)
 
         if verbose:
             print(f"      [Direct Q{q_idx+1}] LLM...", end="", flush=True)
 
         start_time = time.time()
         response = client.messages.create(
-            model=model, max_tokens=50, temperature=0,
+            model=model, max_tokens=100, temperature=0,
             messages=create_image_message(image_base64, prompt)
         )
         duration_ms = int((time.time() - start_time) * 1000)
 
         response_text = response.content[0].text
-        answer = response_text.strip().split('\n')[0].strip()
-        for prefix in ["Answer:", "The answer is", "A:", "**"]:
-            if answer.lower().startswith(prefix.lower()):
-                answer = answer[len(prefix):].strip()
-        answer = answer.rstrip('*').strip()
+        answer = extract_final_answer(response_text, question_type)
 
         if verbose:
             print(f" {len(response_text)}c {duration_ms}ms -> \"{answer}\"")
@@ -251,106 +451,92 @@ Answer:"""
 
 
 # =============================================================================
-# SKILL: Chain-of-Thought (CoT) with Structured Output
+# SKILL: Chain-of-Thought (CoT) with Official Paper Templates + Stage Monitor
 # =============================================================================
 
 def ask_with_cot(image_base64: str, questions: list, question_type: str,
                  model: str = "claude-sonnet-4-5-20250929",
                  verbose: bool = True) -> tuple:
     """
-    Skill: Chain-of-Thought reasoning with structured output format.
+    Skill: Chain-of-Thought reasoning using official paper prompts (Table 7).
 
     Paper finding: CoT significantly outperforms direct answering for closed-source models.
     Claude Sonnet 3.5 achieved highest accuracy (55.81%) with CoT.
 
-    Returns:
-        tuple: (answers_list, trace_list) where trace contains detailed call info
-    """
-    format_rules = {
-        "Fact Checking": "EXACTLY 'True' or 'False'",
-        "Multi Choice": "EXACTLY one letter: A, B, C, or D",
-        "Reasoning": "ONLY the number/value (no units)",
-        "Hypothetical": "ONLY the short answer",
-        "Conversational": "ONLY the short answer",
-    }
+    Stage markers added for monitoring:
+    [UNDERSTAND] -> [LOCATE] -> [READ] -> [CALCULATE/EVALUATE/COMPARE] -> [VERIFY]
+    Final format: "The answer is X"
 
+    Returns:
+        tuple: (answers_list, trace_list) where trace contains detailed call info with stage metrics
+    """
     answers = []
     traces = []
     conversation_history = []
 
     for q_idx, question in enumerate(questions):
-        rule = format_rules.get(question_type, "concise answer only")
-        context = ""
+        # Get official prompt template
+        template_key = question_type if question_type in COT_PROMPTS else "Factoid"
+        template = COT_PROMPTS[template_key]
+
+        # Build conversation context for conversational questions
+        conversation_str = ""
         if question_type == "Conversational" and conversation_history:
-            context = "Previous Q&A:\n" + "\n".join(f"Q: {q} → A: {a}" for q, a in conversation_history) + "\n\n"
+            conversation_str = "Conversation:\n" + "\n".join(
+                f"Q{i+1}: {q}\nA{i+1}: {a}" for i, (q, a) in enumerate(conversation_history)
+            ) + "\n"
 
-        # Structured CoT prompt for easy parsing
-        prompt = f"""{context}Question: {question}
-
-You MUST follow this EXACT output format (do NOT repeat the questions, just fill in your analysis):
-
-[DATA]: <describe what data you need to find>
-[READ]: <list the actual values you read from the chart>
-[CALC]: <show your calculation or reasoning>
-[VERIFY]: <brief sanity check>
-
-Final Answer: <your answer>
-
-EXAMPLE of correct format:
-[DATA]: I need the sales values for 2020 and 2021
-[READ]: 2020 = 150, 2021 = 200
-[CALC]: Difference = 200 - 150 = 50
-[VERIFY]: Positive growth makes sense given the upward trend
-Final Answer: 50
-
-RULES:
-- {rule}
-- NO units in final answer (not "50 million", just "50")
-- NO explanation after Final Answer
-- If unsure, answer "Cannot determine"
-
-Now analyze the chart:"""
+        # Format the prompt
+        if question_type == "Conversational":
+            prompt = template.format(conversation=conversation_str, question=question)
+        else:
+            prompt = template.format(question=question)
 
         if verbose:
             print(f"      [CoT Q{q_idx+1}] LLM...", end="", flush=True)
 
         start_time = time.time()
         response = client.messages.create(
-            model=model, max_tokens=600, temperature=0,
+            model=model, max_tokens=800, temperature=0,
             messages=create_image_message(image_base64, prompt)
         )
         duration_ms = int((time.time() - start_time) * 1000)
 
         response_text = response.content[0].text
         stages = parse_cot_stages(response_text)
-        answer = stages["final"] if stages["final"] else extract_final_answer(response_text)
+        answer = stages["final"] if stages["final"] else extract_final_answer(response_text, question_type)
 
         if verbose:
             print(f" {len(response_text)}c {duration_ms}ms")
-            if stages["data"]:
-                print(f"        → Data: {stages['data'][:60]}...")
-            if stages["read"]:
+            if stages.get("understand"):
+                print(f"        → Understand: {stages['understand'][:60]}...")
+            if stages.get("locate"):
+                print(f"        → Locate: {stages['locate'][:60]}...")
+            if stages.get("read"):
                 print(f"        → Read: {stages['read'][:60]}...")
-            if stages["calc"]:
-                print(f"        → Calc: {stages['calc'][:60]}...")
-            if stages["final"]:
-                print(f"        → Final: {stages['final']}")
+            if stages.get("calculate"):
+                print(f"        → Calculate: {stages['calculate'][:60]}...")
+            if stages.get("verify"):
+                print(f"        → Verify: {stages['verify'][:60]}...")
+            print(f"        → Final: {answer}")
 
-        # Calculate stage metrics
+        # Calculate stage metrics for monitoring
         stage_metrics = analyze_stage_metrics(stages)
 
         # Build trace for this call
         trace = {
             "question_idx": q_idx,
             "question": question,
+            "question_type": question_type,
             "prompt": prompt,
             "response": response_text,
             "stages": {
-                "data": stages["data"],
-                "read": stages["read"],
-                "calc": stages["calc"],
-                "verify": stages["verify"],
-                "final": stages["final"],
+                "understand": stages.get("understand"),
+                "locate": stages.get("locate"),
+                "read": stages.get("read"),
+                "calculate": stages.get("calculate"),
+                "verify": stages.get("verify"),
+                "final": stages.get("final"),
             },
             "stage_metrics": stage_metrics,
             "extracted_answer": answer,
@@ -525,8 +711,8 @@ def run_benchmark(limit: int = None,
         in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
         avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
 
-        # Count each stage
-        expected_stages = ["data", "read", "calc", "verify", "final"]
+        # Count each stage (updated to match new CoT format)
+        expected_stages = ["understand", "locate", "read", "calculate", "verify", "final"]
         stage_counts = {stage: 0 for stage in expected_stages}
         for s in stage_metrics_list:
             for stage in s.get("stages_completed", []):
@@ -548,6 +734,8 @@ def run_benchmark(limit: int = None,
         print(f"  Stage breakdown:")
         for stage, count in stage_counts.items():
             print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+    else:
+        print("\n  No stage metrics collected (no successful CoT responses)")
 
     # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
