@@ -86,6 +86,45 @@ def parse_cot_stages(response_text: str) -> dict:
     return stages
 
 
+def analyze_stage_metrics(stages: dict) -> dict:
+    """
+    Analyze stage completion metrics for a sample.
+
+    Returns:
+        dict with metrics:
+        - stages_completed: list of completed stages
+        - stages_in_order: bool (whether stages followed expected order)
+        - total_stages: int
+        - stage_completion_rate: float
+    """
+    expected_order = ["data", "read", "calc", "verify", "final"]
+    first_appearance = {}
+
+    for i, stage in enumerate(expected_order):
+        if stages.get(stage):
+            first_appearance[stage] = i
+
+    completed_stages = list(first_appearance.keys())
+
+    # Check if stages are in expected order
+    stages_in_order = True
+    prev_idx = -1
+    for stage in completed_stages:
+        curr_idx = expected_order.index(stage)
+        if curr_idx < prev_idx:
+            stages_in_order = False
+            break
+        prev_idx = curr_idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+    }
+
+
 def create_image_message(image_base64: str, text: str) -> list:
     """Create a message with image content for Claude API."""
     return [{
@@ -297,6 +336,9 @@ Now analyze the chart:"""
             if stages["final"]:
                 print(f"        → Final: {stages['final']}")
 
+        # Calculate stage metrics
+        stage_metrics = analyze_stage_metrics(stages)
+
         # Build trace for this call
         trace = {
             "question_idx": q_idx,
@@ -308,7 +350,9 @@ Now analyze the chart:"""
                 "read": stages["read"],
                 "calc": stages["calc"],
                 "verify": stages["verify"],
+                "final": stages["final"],
             },
+            "stage_metrics": stage_metrics,
             "extracted_answer": answer,
             "duration_ms": duration_ms,
             "response_length": len(response_text),
@@ -374,6 +418,7 @@ def run_benchmark(limit: int = None,
 
     results_baseline = []
     results_cot = []
+    stage_metrics_list = []  # Collect stage metrics for aggregation
 
     print("\n" + "-" * 70)
 
@@ -419,6 +464,13 @@ def run_benchmark(limit: int = None,
                 pred_cot, cot_trace = ask_with_cot(image_base64, questions, question_type, model)
                 score_cot = relaxed_correctness(answers, pred_cot, year_flags, question_type)
                 status = "✓" if score_cot >= 1.0 else "✗"
+
+                # Collect stage metrics from each question's trace
+                if cot_trace:
+                    for trace_item in cot_trace:
+                        if trace_item.get("stage_metrics"):
+                            stage_metrics_list.append(trace_item["stage_metrics"])
+
                 print(f"    [CoT Result] {pred_cot[-1][:30]} -> {score_cot:.2f} {status}")
             except Exception as e:
                 pred_cot = [""] * len(questions)
@@ -464,6 +516,39 @@ def run_benchmark(limit: int = None,
         improvement = eval_cot['accuracy'] - eval_baseline['accuracy']
         print(f"\nImprovement: {improvement:+.1%}")
 
+    # Stage Monitor Summary
+    print("\n" + "-" * 40)
+    print("STAGE MONITOR SUMMARY")
+    aggregated_stage_metrics = {}
+    if stage_metrics_list:
+        total = len(stage_metrics_list)
+        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
+        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
+
+        # Count each stage
+        expected_stages = ["data", "read", "calc", "verify", "final"]
+        stage_counts = {stage: 0 for stage in expected_stages}
+        for s in stage_metrics_list:
+            for stage in s.get("stages_completed", []):
+                if stage in stage_counts:
+                    stage_counts[stage] += 1
+
+        aggregated_stage_metrics = {
+            "total_samples": total,
+            "stages_in_order_count": in_order_count,
+            "stages_in_order_rate": in_order_count / total,
+            "avg_completion_rate": avg_completion,
+            "stage_counts": stage_counts,
+            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+        }
+
+        print(f"\n[CoT Mode]")
+        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+        print(f"  Avg completion rate: {avg_completion:.1%}")
+        print(f"  Stage breakdown:")
+        for stage, count in stage_counts.items():
+            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+
     # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = {
@@ -472,6 +557,7 @@ def run_benchmark(limit: int = None,
             "model": model,
             "num_samples": len(samples),
             "question_types": list(stats.keys()),
+            "skill": "chain_of_thought",
         },
         "summary": {
             "direct": {
@@ -481,6 +567,7 @@ def run_benchmark(limit: int = None,
                 "total": len(results_baseline),
             },
         },
+        "stage_monitor": aggregated_stage_metrics,
         "traces": {
             "direct": results_baseline,
         },
