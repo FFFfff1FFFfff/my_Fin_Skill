@@ -3,11 +3,10 @@
 MMLongBench-Doc benchmark runner: compare baseline vs with-skill performance
 PDF document understanding and QA benchmark
 
-Includes Stage Monitor for tracking reasoning stages:
-- UNDERSTAND: Question comprehension
-- LOCATE: Evidence location in document
-- EXTRACT: Information extraction
-- ANSWER: Answer formulation
+Stage Monitor tracks key steps:
+- RETRIEVE: Page retrieval via semantic/keyword search (external)
+- LOCATE: Evidence location in document (page/section)
+- ANSWER: Final answer
 """
 
 import json
@@ -26,32 +25,30 @@ from skill_system import SkillManager
 
 
 # =============================================================================
-# STAGE MONITOR: Track reasoning stages in PDF Document QA flow
+# STAGE MONITOR: Track key steps in PDF Document QA
 # =============================================================================
+
+# Key stages to track (keep it simple)
+KEY_STAGES = ["retrieve", "locate", "answer"]
+
 
 def parse_pdf_stages(response_text: str, retrieval_info: dict = None) -> dict:
     """
-    Parse PDF QA response to extract structured reasoning stages.
+    Parse PDF QA response to extract key reasoning stages.
 
-    Expected stages for MMLongBench PDF QA:
-    - RETRIEVE: Page retrieval (semantic/keyword search) - external
-    - UNDERSTAND: Question comprehension (what info needed, format expected)
-    - LOCATE: Evidence location (page number, section, element type)
-    - EXTRACT: Information extraction (from text, table, chart, figure)
-    - REASON: Any reasoning/calculation needed
-    - ANSWER: Final answer formulation
+    Key stages (max 3):
+    - RETRIEVE: Page retrieval via semantic/keyword search (external)
+    - LOCATE: Evidence location (page/section reference)
+    - ANSWER: Final answer
 
     Args:
         response_text: The LLM response text
-        retrieval_info: Dict with retrieval method and pages (from hybrid_retrieve)
+        retrieval_info: Dict with retrieval method and pages
     """
     stages = {
-        "retrieve": None,      # Page retrieval (set from external retrieval_info)
-        "understand": None,    # Question comprehension
-        "locate": None,        # Evidence location in document
-        "extract": None,       # Information extraction
-        "reason": None,        # Reasoning/calculation
-        "answer": None,        # Answer formulation
+        "retrieve": None,
+        "locate": None,
+        "answer": None,
         "raw": response_text,
     }
 
@@ -60,134 +57,67 @@ def parse_pdf_stages(response_text: str, retrieval_info: dict = None) -> dict:
         method = retrieval_info.get("method", "none")
         pages = retrieval_info.get("pages", [])
         if method and method != "none":
-            stages["retrieve"] = f"{method}: pages {pages[:5]}" if pages else method
+            page_nums = [p.get("page", p) if isinstance(p, dict) else p for p in pages[:3]]
+            stages["retrieve"] = f"{method}:{page_nums}"
 
-    # Pattern matching for stages - more comprehensive patterns
-    step_patterns = {
-        "understand": [
-            # Explicit step markers
-            r'(?:STEP\s*1|Step\s*1)[:\s]*(.+?)(?=STEP\s*2|Step\s*2|LOCATE|EXTRACT|$)',
-            # Question comprehension phrases
-            r'(?:question (?:is )?ask(?:s|ing)|being asked|looking for|need(?:s)? to find)[:\s]*(.+?)(?=\n\n|Based on|Looking|$)',
-            r'(?:understand(?:ing)?|comprehend|identify(?:ing)?|determine)[:\s]*(.+?)(?=\n\n|$)',
-            # Format-related understanding
-            r'(?:answer (?:should be|format|type)|expected (?:format|answer))[:\s]*(.+?)(?=\n|$)',
-        ],
-        "locate": [
-            # Explicit step markers
-            r'(?:STEP\s*2|Step\s*2)[:\s]*(.+?)(?=STEP\s*3|Step\s*3|EXTRACT|$)',
-            # Page references (very common in PDF QA)
-            r'(?:(?:on |at |in |from )?page\s*\d+)[:\s,]*(.{0,200})',
-            r'(?:found (?:on|in|at)|located (?:on|in|at)|see |refer(?:ring)? to)[:\s]*(.+?)(?=\n\n|$)',
-            # Section/element references
-            r'(?:(?:in |from )?(?:the )?(?:table|chart|figure|graph|section|paragraph|heading))[:\s]*(.+?)(?=\n|$)',
-            r'(?:evidence|source|reference)[:\s]*(.+?)(?=\n\n|$)',
-        ],
-        "extract": [
-            # Explicit step markers
-            r'(?:STEP\s*3|Step\s*3)[:\s]*(.+?)(?=STEP\s*4|Step\s*4|REASON|ANSWER|$)',
-            # Extraction phrases
-            r'(?:extract(?:ed|ing)?|value (?:is|shows|indicates)|data shows|according to)[:\s]*(.+?)(?=\n\n|$)',
-            r'(?:from the (?:document|table|chart|figure|text|report))[,:\s]*(.+?)(?=\n\n|$)',
-            # Specific values found
-            r'(?:shows?|states?|indicates?|reports?|mentions?)[:\s]+(?:that\s+)?(.+?)(?=\n|$)',
-            # Numbers with context
-            r'(?:(?:is|was|were|are)\s+)(\d[\d,\.%\$]*(?:\s*(?:million|billion|thousand|percent|%))?)(?:\s|$)',
-        ],
-        "reason": [
-            # Calculation/reasoning step
-            r'(?:STEP\s*4|Step\s*4)[:\s]*(.+?)(?=STEP\s*5|Step\s*5|ANSWER|Final|$)',
-            r'(?:calculat(?:e|ing|ion)|comput(?:e|ing)|reason(?:ing)?)[:\s]*(.+?)(?=\n\n|$)',
-            r'(?:therefore|thus|hence|so|this means)[,:\s]*(.+?)(?=\n|$)',
-            r'(?:adding|subtracting|multiplying|dividing|comparing)[:\s]*(.+?)(?=\n|$)',
-        ],
-        "answer": [
-            # Explicit answer markers
-            r'(?:Final Answer|FINAL ANSWER)[:\s]*(.+?)(?:\n|$)',
-            r'(?:Answer)[:\s]*(.+?)(?:\n|$)',
-            # Conclusion phrases
-            r'(?:therefore|thus|hence|in conclusion),?\s*(?:the answer is\s*)?(.+?)(?:\n|$)',
-            r'(?:the answer (?:is|to this question is))[:\s]*(.+?)(?:\n|$)',
-        ],
-    }
+    # LOCATE: Find page/section references
+    locate_patterns = [
+        r'(?:on |at |from )?page\s*(\d+)',
+        r'(?:in |from )?(?:the )?(?:table|chart|figure|section)\s*(?:\d+|[A-Z])?',
+        r'(?:found |located |see )(?:on |in |at )(.+?)(?:\n|$)',
+    ]
+    for pattern in locate_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            stages["locate"] = match.group(0).strip()[:100]
+            break
 
-    for stage, patterns in step_patterns.items():
-        if stages.get(stage):  # Skip if already set (e.g., retrieve from external)
-            continue
-        for pattern in patterns:
-            match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
-            if match:
-                content = match.group(1).strip() if match.lastindex else match.group(0).strip()
-                # Clean up content
-                content = content.strip('.,;:')
-                if content and len(content) > 3:
-                    stages[stage] = content[:250]  # Increased to 250 chars
-                    break
+    # If no explicit locate, check for page number mentions
+    if not stages["locate"]:
+        page_mentions = re.findall(r'page\s*(\d+)', response_text, re.IGNORECASE)
+        if page_mentions:
+            stages["locate"] = f"pages {list(set(page_mentions[:3]))}"
 
-    # Additional detection: check for page number mentions
-    page_mentions = re.findall(r'page\s*(\d+)', response_text, re.IGNORECASE)
-    if page_mentions and not stages["locate"]:
-        stages["locate"] = f"Pages mentioned: {list(set(page_mentions[:5]))}"
+    # ANSWER: Extract final answer
+    answer_patterns = [
+        r'(?:Final Answer|FINAL ANSWER)[:\s]*(.+?)(?:\n|$)',
+        r'(?:Answer)[:\s]*(.+?)(?:\n|$)',
+        r'(?:the answer is)[:\s]*(.+?)(?:\n|$)',
+    ]
+    for pattern in answer_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            stages["answer"] = match.group(1).strip()[:100]
+            break
 
-    # Additional detection: check for "Not answerable" responses
-    if re.search(r'(?:not answerable|cannot (?:be )?answer|unanswerable|not (?:found|available|present))', response_text, re.IGNORECASE):
-        stages["not_answerable_detected"] = True
+    # Check for "Not answerable"
+    if re.search(r'(?:not answerable|cannot answer|unanswerable)', response_text, re.IGNORECASE):
+        stages["not_answerable"] = True
 
     return stages
 
 
 def analyze_stage_metrics(stages: dict, retrieval_info: dict = None) -> dict:
     """
-    Analyze stage completion metrics for a sample.
-
-    Args:
-        stages: Output from parse_pdf_stages
-        retrieval_info: Dict with retrieval method and pages
+    Analyze stage completion metrics.
 
     Returns:
-        dict with metrics:
-        - stages_completed: list of completed stages
-        - stages_in_order: bool (whether stages followed expected order)
-        - total_stages: int
-        - stage_completion_rate: float
-        - retrieval_method: str (semantic/keyword/none)
-        - pages_retrieved: list
+        dict with: stages_completed, retrieval_method, pages_retrieved
     """
-    expected_order = ["retrieve", "understand", "locate", "extract", "reason", "answer"]
-    first_appearance = {}
+    completed = [s for s in KEY_STAGES if stages.get(s)]
 
-    for i, stage in enumerate(expected_order):
-        if stages.get(stage):
-            first_appearance[stage] = i
-
-    completed_stages = list(first_appearance.keys())
-
-    # Check if stages are in expected order
-    stages_in_order = True
-    prev_idx = -1
-    for stage in completed_stages:
-        curr_idx = expected_order.index(stage)
-        if curr_idx < prev_idx:
-            stages_in_order = False
-            break
-        prev_idx = curr_idx
-
-    # Extract retrieval info
     retrieval_method = "none"
     pages_retrieved = []
     if retrieval_info:
         retrieval_method = retrieval_info.get("method", "none")
-        pages_retrieved = [p.get("page") for p in retrieval_info.get("pages", [])]
+        pages_retrieved = [p.get("page") if isinstance(p, dict) else p for p in retrieval_info.get("pages", [])]
 
     return {
-        "stages_completed": completed_stages,
-        "stages_in_order": stages_in_order,
-        "total_stages": len(completed_stages),
-        "stage_completion_rate": len(completed_stages) / len(expected_order),
-        "expected_stages": expected_order,
+        "stages_completed": completed,
+        "total_stages": len(completed),
         "retrieval_method": retrieval_method,
-        "pages_retrieved": pages_retrieved,
-        "not_answerable_detected": stages.get("not_answerable_detected", False),
+        "pages_retrieved": pages_retrieved[:5],
+        "not_answerable": stages.get("not_answerable", False),
     }
 
 # Import PDF text extraction tools
@@ -753,41 +683,24 @@ def run_benchmark(limit: int = None,
                 )
                 score_skill = eval_score(pred_skill, answer, answer_format)
 
-                # Extract retrieval info from trace
+                # Simple logging: retrieval + result
                 retrieval_info = skill_trace.get("retrieval", {}) if skill_trace else {}
                 retrieval_method = retrieval_info.get("method", "none")
                 retrieval_pages = retrieval_info.get("pages", [])
 
-                # Print detailed stage info
+                status = "✓" if score_skill >= 0.5 else "✗"
+                ret_str = ""
+                if retrieval_method and retrieval_method != "none":
+                    pages = [str(p.get("page", p) if isinstance(p, dict) else p) for p in retrieval_pages[:3]]
+                    ret_str = f" [{retrieval_method}:{','.join(pages)}]"
+
+                print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f} {status}{ret_str}")
+
+                # Add to metrics for aggregation
                 if skill_trace and skill_trace.get("stage_metrics"):
                     metrics = skill_trace["stage_metrics"]
-                    stages_completed = metrics.get("stages_completed", [])
-                    stages_str = "/".join([s.upper()[:3] for s in stages_completed])
-
-                    # Print retrieval details
-                    if retrieval_method and retrieval_method != "none":
-                        pages_str = ",".join([str(p.get("page", p)) for p in retrieval_pages[:3]])
-                        print(f"    [Retrieval] {retrieval_method} -> pages [{pages_str}]")
-
-                    # Print detected stages with content preview
-                    stages_data = skill_trace.get("stages", {})
-                    for stage_name in ["understand", "locate", "extract", "reason", "answer"]:
-                        if stages_data.get(stage_name):
-                            content = stages_data[stage_name][:60].replace('\n', ' ')
-                            print(f"    [{stage_name.upper()[:3]}] {content}...")
-
-                    # Print final result
-                    status = "✓" if score_skill >= 0.5 else "✗"
-                    print(f"Skill:    {pred_skill[:40]}... -> {score_skill:.2f} {status} [{stages_str}]")
-
-                    # Add to metrics for aggregation
                     metrics["retrieval_method"] = retrieval_method
                     stage_metrics_list.append(metrics)
-                else:
-                    # No stage metrics, just print basic info
-                    status = "✓" if score_skill >= 0.5 else "✗"
-                    ret_str = f"[{retrieval_method}]" if retrieval_method and retrieval_method != "none" else ""
-                    print(f"Skill:    {pred_skill[:40]}... -> {score_skill:.2f} {status} {ret_str}")
             except Exception as e:
                 pred_skill = ""
                 full_response = ""
@@ -857,54 +770,37 @@ def run_benchmark(limit: int = None,
             improvement_ans = eval_skill_ans['accuracy'] - eval_baseline_ans['accuracy']
             print(f"\n  Improvement: {improvement_ans:+.1%}")
 
-    # Stage Monitor Summary
+    # Stage Monitor Summary (simplified)
     print("\n" + "-" * 40)
-    print("STAGE MONITOR SUMMARY")
+    print("STAGE MONITOR")
     aggregated_stage_metrics = {}
     if stage_metrics_list:
         total = len(stage_metrics_list)
-        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
-        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
-        not_answerable_count = sum(1 for s in stage_metrics_list if s.get("not_answerable_detected", False))
 
         # Count retrieval methods
-        retrieval_counts = {"semantic": 0, "keyword": 0, "none": 0, "fallback": 0}
+        retrieval_counts = {"semantic": 0, "keyword": 0, "none": 0}
         for s in stage_metrics_list:
             method = s.get("retrieval_method", "none")
-            if method in retrieval_counts:
-                retrieval_counts[method] += 1
-            else:
-                retrieval_counts["none"] += 1
+            retrieval_counts[method] = retrieval_counts.get(method, 0) + 1
 
-        # Count each stage (updated with new stages)
-        expected_stages = ["retrieve", "understand", "locate", "extract", "reason", "answer"]
-        stage_counts = {stage: 0 for stage in expected_stages}
+        # Count key stages
+        stage_counts = {stage: 0 for stage in KEY_STAGES}
         for s in stage_metrics_list:
             for stage in s.get("stages_completed", []):
                 if stage in stage_counts:
                     stage_counts[stage] += 1
 
         aggregated_stage_metrics = {
-            "total_samples": total,
-            "stages_in_order_count": in_order_count,
-            "stages_in_order_rate": in_order_count / total,
-            "avg_completion_rate": avg_completion,
-            "retrieval_counts": retrieval_counts,
-            "retrieval_rates": {k: v / total for k, v in retrieval_counts.items()},
-            "stage_counts": stage_counts,
-            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+            "total": total,
+            "retrieval": retrieval_counts,
+            "stages": stage_counts,
         }
 
-        print(f"\n[Skill Mode]")
-        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
-        print(f"  Avg completion rate: {avg_completion:.1%}")
-        print(f"  Retrieval methods:")
-        for method, count in retrieval_counts.items():
-            if count > 0:
-                print(f"    {method}: {count}/{total} ({count/total:.1%})")
-        print(f"  Stage breakdown:")
-        for stage, count in stage_counts.items():
-            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+        # Print compact summary
+        ret_str = ", ".join([f"{k}:{v}" for k, v in retrieval_counts.items() if v > 0])
+        stage_str = ", ".join([f"{k}:{v}" for k, v in stage_counts.items()])
+        print(f"  Retrieval: {ret_str}")
+        print(f"  Stages: {stage_str}")
 
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
