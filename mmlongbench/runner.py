@@ -350,7 +350,7 @@ def ask_with_skill(doc_content: any, question: str, answer_format: str,
 
     # Build text context using hybrid retrieval (keyword + semantic)
     text_context = ""
-    retrieval_method = None
+    retrieval_method = "none"
     relevant_pages_info = []
 
     if extracted_text and "pages" in extracted_text:
