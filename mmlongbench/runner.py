@@ -565,6 +565,9 @@ def run_benchmark(limit: int = None,
     unique_pdfs = set(s["doc_id"] for s in samples)
     print(f"Unique PDFs to process: {len(unique_pdfs)}")
 
+    # Debug: print retrieval capability status
+    print(f"\n[Debug] HAS_PDF_TOOLS={HAS_PDF_TOOLS}, HAS_RETRIEVER={HAS_RETRIEVER}")
+
     # Download PDFs and cache
     print("\nDownloading and processing PDFs...")
     doc_cache = {}  # Either pdf_base64 or page_images
@@ -592,31 +595,39 @@ def run_benchmark(limit: int = None,
             # Also extract text if tools available (for skill mode)
             if HAS_PDF_TOOLS and doc_id in doc_cache:
                 extracted = extract_pdf_text(str(pdf_path))
-                if "error" not in extracted:
-                    text_cache[doc_id] = extracted
+                if "error" in extracted:
+                    raise RuntimeError(f"PDF text extraction failed for {doc_id}: {extracted['error']}")
+                text_cache[doc_id] = extracted
+                print(f"  [text] {doc_id}: {len(extracted.get('pages', {}))} pages")
         else:
             print(f"  ✗ {doc_id} (download failed)")
 
-    if HAS_PDF_TOOLS and text_cache:
-        print(f"Extracted text from {len(text_cache)} PDFs")
+    if not text_cache:
+        raise RuntimeError("No PDF text extracted. Check HAS_PDF_TOOLS and pypdf/pdfplumber installation.")
+
+    print(f"Extracted text from {len(text_cache)} PDFs")
 
     # Create embeddings for semantic retrieval (if retriever available)
     embedding_cache = {}
-    if HAS_RETRIEVER and text_cache:
-        print("\nCreating embeddings for semantic retrieval...")
-        for doc_id, extracted_text in text_cache.items():
-            try:
-                # Get PDF path for caching
-                pdf_path = download_pdf(doc_id)
-                if pdf_path:
-                    embeddings = get_or_create_embeddings(str(pdf_path), extracted_text)
-                    embedding_cache[doc_id] = embeddings
-                    print(f"  ✓ {doc_id} ({embeddings.get('total_pages', 0)} pages embedded)")
-            except Exception as e:
-                print(f"  ✗ {doc_id} (embedding failed: {e})")
+    if not HAS_RETRIEVER:
+        raise RuntimeError("HAS_RETRIEVER is False. Check skills/pdf_retriever/retriever_tools.py import.")
 
-        if embedding_cache:
-            print(f"Created embeddings for {len(embedding_cache)} PDFs")
+    print("\nCreating embeddings for semantic retrieval...")
+    for doc_id, extracted_text in text_cache.items():
+        try:
+            # Get PDF path for caching
+            pdf_path = download_pdf(doc_id)
+            if pdf_path:
+                embeddings = get_or_create_embeddings(str(pdf_path), extracted_text)
+                embedding_cache[doc_id] = embeddings
+                print(f"  ✓ {doc_id} ({embeddings.get('total_pages', 0)} pages embedded)")
+        except Exception as e:
+            raise RuntimeError(f"Embedding creation failed for {doc_id}: {e}")
+
+    if not embedding_cache:
+        raise RuntimeError("No embeddings created. Check VOYAGE_API_KEY and Voyage AI setup.")
+
+    print(f"Created embeddings for {len(embedding_cache)} PDFs")
 
     # Filter samples to only those with available documents
     samples = [s for s in samples if s["doc_id"] in doc_cache]
