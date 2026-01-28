@@ -376,7 +376,6 @@ def ask_with_skill(doc_content: any, question: str, answer_format: str,
 
         # Fallback to keyword search if retriever not available or failed
         if not text_context and HAS_PDF_TOOLS:
-            import re
             words = re.findall(r'\b[A-Za-z]{3,}\b|\b\d+\.?\d*\b', question)
             keywords = [w.lower() for w in words if w.lower() not in
                        {'what', 'which', 'where', 'when', 'how', 'many', 'much',
