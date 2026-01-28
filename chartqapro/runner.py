@@ -3,8 +3,10 @@
 ChartQAPro benchmark runner: compare baseline vs with-skill performance
 Chart Question Answering with visual and logical reasoning
 
-Uses official ChartQAPro paper prompt templates (Table 6 & 7)
-Skill approach: Chain-of-Thought (CoT) with structured output
+Uses official ChartQAPro paper prompt templates:
+- Baseline (Direct): Table 6 prompts - kept in runner
+- Skill (CoT): Table 7 prompts - loaded from skills/chartqa_cot/
+
 Based on paper findings: CoT > PoT > Direct for closed-source models
 """
 
@@ -20,6 +22,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from anthropic import Anthropic
 from data_loader import load_chartqapro, load_sample_data, get_question_type_stats
 from evaluator import relaxed_correctness, evaluate_batch
+
+# Import CoT prompts from skill
+from skills.chartqa_cot.cot_prompts import COT_PROMPTS, get_cot_prompt, EXPECTED_STAGES
 
 client = Anthropic()
 
@@ -95,103 +100,7 @@ STRICT FORMAT RULES:
 Question: {question}""",
 }
 
-# Chain of Thought prompts (Table 7)
-COT_PROMPTS = {
-    "Factoid": """You are given a factoid question that you need to answer based on the provided image.
-You need to think step-by-step, but your final answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
-If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
-
-STRICT REASONING FORMAT:
-Think step-by-step using these stages:
-1. [UNDERSTAND]: What is the question asking?
-2. [LOCATE]: Where in the chart is the relevant data?
-3. [READ]: What are the exact values from the chart?
-4. [CALCULATE]: Any calculations needed? (show work)
-5. [VERIFY]: Does the answer make sense?
-
-STRICT ANSWER FORMAT:
-- End with exactly: "The answer is X"
-- X should be ONLY the answer (no units unless in chart)
-- For years: exact format from chart
-- For numbers: no extra units
-
-Question: {question}""",
-
-    "Multi Choice": """You are given a question along with different possible answers. You need to select the correct answer from them based on the provided image.
-You need to think step-by-step, but your final answer should be one of the options letters only: a, b, c or d (just the letter itself without any additional text). If the question is unanswerable based on the information in the provided image, your answer should be unanswerable.
-If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
-
-STRICT REASONING FORMAT:
-Think step-by-step using these stages:
-1. [UNDERSTAND]: What is the question asking?
-2. [LOCATE]: Where in the chart is the relevant data?
-3. [READ]: What are the exact values?
-4. [EVALUATE]: Check each option against the data
-5. [VERIFY]: Confirm the selected option
-
-STRICT ANSWER FORMAT:
-- End with exactly: "The answer is X"
-- X must be ONLY a single lowercase letter: a, b, c, or d
-- Example: "The answer is b"
-
-Question: {question}""",
-
-    "Hypothetical": """You are given a hypothetical question that you need to answer based on the provided image.
-You need to think step-by-step, but your final answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
-If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
-
-STRICT REASONING FORMAT:
-Think step-by-step using these stages:
-1. [UNDERSTAND]: What hypothetical scenario is being asked?
-2. [LOCATE]: Where is the relevant baseline data?
-3. [READ]: What are the current values?
-4. [CALCULATE]: Apply the hypothetical change
-5. [VERIFY]: Is the result reasonable?
-
-STRICT ANSWER FORMAT:
-- End with exactly: "The answer is X"
-- X should be ONLY the answer
-
-Question: {question}""",
-
-    "Fact Checking": """You are given a fact statement that you need to assess based on the information in the provided image.
-You need to think step-by-step, but your final answer should be either true or false (without any additional text). If the question is unanswerable based on the information in the provided image, your answer should be unanswerable.
-If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
-
-STRICT REASONING FORMAT:
-Think step-by-step using these stages:
-1. [UNDERSTAND]: What claim is being made?
-2. [LOCATE]: Where is the relevant data in the chart?
-3. [READ]: What are the actual values?
-4. [COMPARE]: Does the data support or refute the claim?
-5. [VERIFY]: Double-check the conclusion
-
-STRICT ANSWER FORMAT:
-- End with exactly: "The answer is X"
-- X must be ONLY: true OR false (lowercase)
-- Example: "The answer is true"
-
-Question: {question}""",
-
-    "Conversational": """You are given a multi-turn conversation, and your job is to answer the final question based on the conversation history and the information in the provided image.
-You need to think step-by-step, but your final answer should be a single word, number, or phrase. If the question is unanswerable based on the information in the provided image, your answer should be unanswerable. Do not generate units. But if numerical units such as million, m, billion, B, or K are required, use the exact notation shown in the chart.
-If there are multiple final answers, put them in brackets using this format ['Answer1', 'Answer2'].
-
-STRICT REASONING FORMAT:
-Think step-by-step using these stages:
-1. [CONTEXT]: What was discussed in previous turns?
-2. [UNDERSTAND]: What is the current question asking?
-3. [LOCATE]: Where is the relevant data?
-4. [READ]: What are the exact values?
-5. [VERIFY]: Does this follow logically from the conversation?
-
-STRICT ANSWER FORMAT:
-- End with exactly: "The answer is X"
-- X should be ONLY the answer
-
-{conversation}
-Question: {question}""",
-}
+# Note: COT_PROMPTS are now imported from skills/chartqa_cot/cot_prompts.py
 
 
 # =============================================================================
@@ -270,8 +179,8 @@ def analyze_stage_metrics(stages: dict) -> dict:
         - total_stages: int
         - stage_completion_rate: float
     """
-    # Updated stage order matching new CoT format
-    expected_order = ["understand", "locate", "read", "calculate", "verify", "final"]
+    # Use expected stages from skill
+    expected_order = EXPECTED_STAGES
     first_appearance = {}
 
     for i, stage in enumerate(expected_order):
@@ -711,8 +620,8 @@ def run_benchmark(limit: int = None,
         in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
         avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
 
-        # Count each stage (updated to match new CoT format)
-        expected_stages = ["understand", "locate", "read", "calculate", "verify", "final"]
+        # Count each stage (using expected stages from skill)
+        expected_stages = EXPECTED_STAGES
         stage_counts = {stage: 0 for stage in expected_stages}
         for s in stage_metrics_list:
             for stage in s.get("stages_completed", []):

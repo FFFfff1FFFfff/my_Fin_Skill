@@ -7,6 +7,28 @@ Multi-round code generation with execution feedback for Excel/spreadsheet manipu
 
 ---
 
+## Stage Markers
+
+All responses should demonstrate these reasoning stages:
+
+1. **EXPLORE**: Structure discovery (Round 1-2)
+   - List sheets, tables, columns
+   - Identify column types and data patterns
+
+2. **IMPLEMENT**: Solution code generation
+   - Data transformation/computation
+   - Write results to cells
+
+3. **EXECUTE**: Code execution feedback
+   - Success/error status
+   - Output file creation check
+
+4. **VERIFY**: Self-check (Final round)
+   - Verify answer_position has expected value
+   - Confirm file saved correctly
+
+---
+
 ## Optimized Multi-Round Strategy
 
 ### Key Improvements (vs basic React)
@@ -103,3 +125,38 @@ Single JSON file containing:
 | **Hard Restriction** | 1 if ALL test cases pass, 0 otherwise |
 
 Paper reference: GPT-4o ~18% Hard, Human ~71% Hard
+
+---
+
+## Prompt Templates
+
+Prompt templates are defined in `pot_tools.py`:
+
+| Template | Setting | Description |
+|----------|---------|-------------|
+| `PROMPT_FORMAT_SINGLE` | `react_exec` | Single-round baseline with data preview |
+| `PROMPT_NO_DF_RCT_FORMAT` | `pure_react_exec` | Multi-round without data preview |
+| `PROMPT_DF_RCT_FORMAT` | `row_react_exec` | Multi-round with data preview (Sheet-Level) |
+| `PROMPT_DF_RCT_FORMAT_CELL_LEVEL` | `row_react_exec` | Multi-round with data preview (Cell-Level) |
+
+### Key Prompt Rules
+
+1. **Use variables, not literals**: Code must use `spreadsheet_path` and `output_path` variables
+2. **Formula handling**:
+   - Sheet-Level: Write Excel formula strings like `'=SUM(A1:B1)'`
+   - Cell-Level: Compute values in Python and write numeric results
+3. **Always save**: Code must include `wb.save(output_path)`
+
+---
+
+## Tools Reference
+
+Functions available in `pot_tools.py`:
+
+| Function | Description |
+|----------|-------------|
+| `extract_code(response)` | Extract Python code from LLM response |
+| `execute_code(code, input_file, output_file)` | Execute code with spreadsheet paths |
+| `format_exec_result(result, output_file)` | Format execution result as feedback |
+| `check_output_exists(output_file)` | Check if output file was created |
+| `build_prompt(sample, setting, max_turns, output_path)` | Build prompt from sample data |
