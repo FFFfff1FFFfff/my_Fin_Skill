@@ -224,10 +224,8 @@ Give a direct, concise answer."""
         "search_results": search_results,
         "stages": {
             "search": stages["search"],
-            "categorize": stages["categorize"],
-            "detect": stages["detect"],
-            "resolve": stages["resolve"],
-            "final": stages["final"],
+            "reason": stages["reason"],
+            "answer": stages["answer"],
         },
         "stage_metrics": stage_metrics,
     }
@@ -312,12 +310,10 @@ def run_benchmark(source: str = "sample", limit: int = None,
             stage_tags = []
             if stages.get("search"):
                 stage_tags.append("SEARCH")
-            if stages.get("categorize"):
-                stage_tags.append("CAT")
-            if stages.get("detect"):
-                stage_tags.append("DETECT")
-            if stages.get("resolve"):
-                stage_tags.append("RESOLVE")
+            if stages.get("reason"):
+                stage_tags.append("REASON")
+            if stages.get("answer"):
+                stage_tags.append("ANSWER")
             stage_info = f"[{'/'.join(stage_tags)}]" if stage_tags else ""
 
             print(f"  [Skill] {pred_skill[:50]}... -> {grade_str} ({skill_trace['duration_ms']}ms) {stage_info}")
