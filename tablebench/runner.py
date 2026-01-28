@@ -84,40 +84,96 @@ def ask_visualization(question: str, table: str, model: str = "claude-sonnet-4-5
 
 
 # =============================================================================
-# STAGE PARSING: Extract key reasoning stages from TCoT response
+# STAGE PARSING: Extract structured reasoning stages from TCoT response
 # =============================================================================
 
-KEY_STAGES = ["extract", "calculate", "answer"]
-
-
 def parse_tcot_stages(response_text: str) -> dict:
-    """Parse TCoT response to extract key stages: extract, calculate, answer."""
-    stages = {"extract": None, "calculate": None, "answer": None, "raw": response_text}
+    """
+    Parse TCoT (Table Chain-of-Thought) response to extract reasoning stages.
 
-    # EXTRACT
-    match = re.search(r'(?:STEP\s*3|Extract|Data)[:\s]*(.+?)(?=STEP\s*4|Calculate|Final|$)',
-                      response_text, re.DOTALL | re.IGNORECASE)
-    if match:
-        stages["extract"] = match.group(1).strip()[:100]
+    Expected stages based on skill:
+    - STEP 1: Parse the Table
+    - STEP 2: Understand the Question
+    - STEP 3: Extract Data
+    - STEP 4: Calculate
+    - STEP 5: Format Answer / Final Answer
+    """
+    stages = {
+        "parse_table": None,
+        "understand_question": None,
+        "extract_data": None,
+        "calculate": None,
+        "final_answer": None,
+        "raw": response_text,
+    }
 
-    # CALCULATE
-    match = re.search(r'(?:STEP\s*4|Calculate|Calculation)[:\s]*(.+?)(?=STEP\s*5|Final|Answer|$)',
-                      response_text, re.DOTALL | re.IGNORECASE)
-    if match:
-        stages["calculate"] = match.group(1).strip()[:100]
+    # Try to extract numbered steps
+    step_patterns = {
+        "parse_table": r'(?:STEP\s*1|Step\s*1|1\.|Parse|Table Structure)[:\s]*(.+?)(?=STEP\s*2|Step\s*2|2\.|Understand|Question|$)',
+        "understand_question": r'(?:STEP\s*2|Step\s*2|2\.|Understand|Question Type)[:\s]*(.+?)(?=STEP\s*3|Step\s*3|3\.|Extract|Data|$)',
+        "extract_data": r'(?:STEP\s*3|Step\s*3|3\.|Extract|Data Point)[:\s]*(.+?)(?=STEP\s*4|Step\s*4|4\.|Calculate|Calculation|$)',
+        "calculate": r'(?:STEP\s*4|Step\s*4|4\.|Calculate|Calculation)[:\s]*(.+?)(?=STEP\s*5|Step\s*5|5\.|Final|Answer|Format|$)',
+    }
 
-    # ANSWER
-    match = re.search(r'Final Answer:\s*(.+?)(?:\n|$)', response_text, re.IGNORECASE)
-    if match:
-        stages["answer"] = match.group(1).strip()[:100]
+    for stage, pattern in step_patterns.items():
+        match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+        if match:
+            content = match.group(1).strip()
+            if content and len(content) > 5:  # Filter out very short matches
+                stages[stage] = content[:200]  # Limit length for display
+
+    # Extract final answer
+    answer_patterns = [
+        r'Final Answer:\s*(.+?)(?:\n|$)',
+        r'Answer:\s*(.+?)(?:\n|$)',
+        r'\*\*(.+?)\*\*\s*$',
+    ]
+    for pattern in answer_patterns:
+        match = re.search(pattern, response_text, re.IGNORECASE)
+        if match:
+            stages["final_answer"] = match.group(1).strip()
+            break
 
     return stages
 
 
 def analyze_stage_metrics(stages: dict) -> dict:
-    """Analyze stage completion metrics."""
-    completed = [s for s in KEY_STAGES if stages.get(s)]
-    return {"stages_completed": completed, "total_stages": len(completed)}
+    """
+    Analyze stage completion metrics for a sample.
+
+    Returns:
+        dict with metrics:
+        - stages_completed: list of completed stages
+        - stages_in_order: bool (whether stages followed expected order)
+        - total_stages: int
+        - stage_completion_rate: float
+    """
+    expected_order = ["parse_table", "understand_question", "extract_data", "calculate", "final_answer"]
+    first_appearance = {}
+
+    for i, stage in enumerate(expected_order):
+        if stages.get(stage):
+            first_appearance[stage] = i
+
+    completed_stages = list(first_appearance.keys())
+
+    # Check if stages are in expected order
+    stages_in_order = True
+    prev_idx = -1
+    for stage in completed_stages:
+        curr_idx = expected_order.index(stage)
+        if curr_idx < prev_idx:
+            stages_in_order = False
+            break
+        prev_idx = curr_idx
+
+    return {
+        "stages_completed": completed_stages,
+        "stages_in_order": stages_in_order,
+        "total_stages": len(completed_stages),
+        "stage_completion_rate": len(completed_stages) / len(expected_order),
+        "expected_stages": expected_order,
+    }
 
 
 # Use extract_answer_from_response from skill (imported above as extract_answer_from_response)
@@ -548,18 +604,36 @@ def run_benchmark(source: str = "sample", limit: int = None, offset: int = 0,
 
     # Stage Monitor Summary
     print("\n" + "-" * 40)
-    print("STAGE MONITOR")
+    print("STAGE MONITOR SUMMARY")
     aggregated_stage_metrics = {}
     if stage_metrics_list:
         total = len(stage_metrics_list)
-        stage_counts = {stage: 0 for stage in KEY_STAGES}
+        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
+        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
+
+        # Count each stage
+        expected_stages = ["parse_table", "understand_question", "extract_data", "calculate", "final_answer"]
+        stage_counts = {stage: 0 for stage in expected_stages}
         for s in stage_metrics_list:
             for stage in s.get("stages_completed", []):
                 if stage in stage_counts:
                     stage_counts[stage] += 1
-        aggregated_stage_metrics = {"total": total, "stages": stage_counts}
-        stage_str = ", ".join([f"{k}:{v}" for k, v in stage_counts.items()])
-        print(f"  Stages: {stage_str}")
+
+        aggregated_stage_metrics = {
+            "total_samples": total,
+            "stages_in_order_count": in_order_count,
+            "stages_in_order_rate": in_order_count / total,
+            "avg_completion_rate": avg_completion,
+            "stage_counts": stage_counts,
+            "stage_rates": {k: v / total for k, v in stage_counts.items()},
+        }
+
+        print(f"\n[Skill Mode - TCoT]")
+        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
+        print(f"  Avg completion rate: {avg_completion:.1%}")
+        print(f"  Stage breakdown:")
+        for stage, count in stage_counts.items():
+            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
 
     # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

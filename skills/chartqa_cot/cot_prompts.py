@@ -125,5 +125,12 @@ def get_cot_prompt(question_type: str, question: str, conversation: str = "") ->
         return template.format(question=question)
 
 
-# Key stages to track (simplified)
-KEY_STAGES = ["read", "calculate", "answer"]
+# Expected stages for stage monitoring
+EXPECTED_STAGES = ["understand", "locate", "read", "calculate", "verify", "final"]
+
+# Stage aliases (some question types use different stage names)
+STAGE_ALIASES = {
+    "evaluate": "calculate",  # Multi Choice uses EVALUATE instead of CALCULATE
+    "compare": "calculate",   # Fact Checking uses COMPARE instead of CALCULATE
+    "context": "understand",  # Conversational has CONTEXT before UNDERSTAND
+}
