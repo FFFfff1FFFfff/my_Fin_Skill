@@ -126,6 +126,18 @@ try:
 except ImportError:
     HAS_PDF_TOOLS = False
 
+# Import PDF retriever tools (Voyage AI embeddings)
+try:
+    from skills.pdf_retriever.retriever_tools import (
+        get_or_create_embeddings,
+        find_relevant_pages,
+        get_relevant_page_texts,
+        hybrid_retrieve,
+    )
+    HAS_RETRIEVER = True
+except ImportError:
+    HAS_RETRIEVER = False
+
 # Import OpenAI for answer extraction (optional)
 try:
     from openai import OpenAI
@@ -308,13 +320,18 @@ Final Answer:"""
 def ask_with_skill(doc_content: any, question: str, answer_format: str,
                    skill_prompt: str, model: str = "claude-sonnet-4-5-20250929",
                    extracted_text: dict = None,
+                   page_embeddings: dict = None,
+                   pdf_path: str = None,
                    use_images: bool = False,
                    use_gpt_extraction: bool = False) -> tuple[str, str, dict]:
     """
-    Answer with skill enhancement, optionally including extracted text.
+    Answer with skill enhancement using semantic retrieval.
 
     Args:
         doc_content: Either pdf_base64 (str) or page_images (list)
+        extracted_text: Output from extract_pdf_text()
+        page_embeddings: Pre-computed Voyage AI embeddings (optional)
+        pdf_path: Path to PDF for embedding cache (optional)
         use_images: If True, doc_content is list of page images
         use_gpt_extraction: If True, use GPT-4o to extract answer
 
@@ -330,41 +347,64 @@ def ask_with_skill(doc_content: any, question: str, answer_format: str,
         "None": "If the question cannot be answered, state 'Not answerable'."
     }.get(answer_format, "")
 
-    # Build SMART text context using keyword search
+    # Build text context using hybrid retrieval (keyword + semantic)
     text_context = ""
-    if extracted_text and "pages" in extracted_text and HAS_PDF_TOOLS:
-        # Extract keywords from question (simple approach: nouns and numbers)
-        import re
-        words = re.findall(r'\b[A-Za-z]{3,}\b|\b\d+\.?\d*\b', question)
-        keywords = [w.lower() for w in words if w.lower() not in
-                   {'what', 'which', 'where', 'when', 'how', 'many', 'much',
-                    'the', 'and', 'for', 'are', 'this', 'that', 'from', 'with',
-                    'does', 'did', 'was', 'were', 'have', 'has', 'been', 'being'}]
+    retrieval_method = None
+    relevant_pages_info = []
 
-        if keywords:
-            # Search for keywords in document
-            matches = search_in_pdf(extracted_text, ' '.join(keywords[:5]))
-
-            if matches:
-                # Only include pages with matches, with full context
-                relevant_pages = []
-                seen_pages = set()
-                for match in matches[:10]:  # Top 10 matches
-                    page_num = match.get("page", 0)
-                    if page_num not in seen_pages:
-                        seen_pages.add(page_num)
-                        page_key = page_num if page_num in extracted_text["pages"] else str(page_num)
-                        if page_key in extracted_text["pages"]:
-                            page_text = extracted_text["pages"][page_key]
-                            # Include more text per page (up to 1500 chars)
-                            relevant_pages.append(f"[Page {page_num}]:\n{page_text[:1500]}")
-
-                if relevant_pages:
+    if extracted_text and "pages" in extracted_text:
+        # Use hybrid retrieval if available (semantic + keyword fallback)
+        if HAS_RETRIEVER and page_embeddings:
+            try:
+                relevant_pages_info, text_context_raw, retrieval_method = hybrid_retrieve(
+                    question=question,
+                    extracted_text=extracted_text,
+                    page_embeddings=page_embeddings,
+                    top_k=5,
+                    keyword_threshold=2
+                )
+                if text_context_raw:
                     text_context = f"""
 
---- RELEVANT TEXT SECTIONS (based on keyword search) ---
-{chr(10).join(relevant_pages[:5])}
---- END RELEVANT SECTIONS ---
+--- RELEVANT PAGES (found via {retrieval_method} search) ---
+{text_context_raw}
+--- END RELEVANT PAGES ---
+"""
+            except Exception as e:
+                print(f"        [Retriever] Error: {e}, falling back to keyword search")
+                retrieval_method = "fallback"
+
+        # Fallback to keyword search if retriever not available or failed
+        if not text_context and HAS_PDF_TOOLS:
+            import re
+            words = re.findall(r'\b[A-Za-z]{3,}\b|\b\d+\.?\d*\b', question)
+            keywords = [w.lower() for w in words if w.lower() not in
+                       {'what', 'which', 'where', 'when', 'how', 'many', 'much',
+                        'the', 'and', 'for', 'are', 'this', 'that', 'from', 'with',
+                        'does', 'did', 'was', 'were', 'have', 'has', 'been', 'being'}]
+
+            if keywords:
+                matches = search_in_pdf(extracted_text, ' '.join(keywords[:5]))
+                if matches:
+                    relevant_pages = []
+                    seen_pages = set()
+                    for match in matches[:5]:
+                        page_num = match.get("page", 0)
+                        if page_num not in seen_pages:
+                            seen_pages.add(page_num)
+                            page_key = page_num if page_num in extracted_text["pages"] else str(page_num)
+                            if page_key in extracted_text["pages"]:
+                                page_text = extracted_text["pages"][page_key]
+                                relevant_pages.append(f"[Page {page_num}]:\n{page_text[:1500]}")
+                                relevant_pages_info.append({"page": page_num, "method": "keyword"})
+
+                    if relevant_pages:
+                        retrieval_method = "keyword"
+                        text_context = f"""
+
+--- RELEVANT PAGES (found via keyword search) ---
+{chr(10).join(relevant_pages)}
+--- END RELEVANT PAGES ---
 """
 
     # Simpler, more focused prompt
@@ -411,7 +451,8 @@ If information is not in the document, state "Not answerable"."""
                 "prompt": prompt[:300],
                 "response": full_response,
                 "duration_ms": duration_ms,
-                "keyword_search_used": bool(text_context),
+                "retrieval_method": retrieval_method,
+                "relevant_pages": relevant_pages_info,
                 "stages": {k: v for k, v in stages.items() if k != "raw"},
                 "stage_metrics": stage_metrics,
             }
@@ -430,7 +471,8 @@ If information is not in the document, state "Not answerable"."""
         "prompt": prompt[:300],
         "response": full_response,
         "duration_ms": duration_ms,
-        "keyword_search_used": bool(text_context),
+        "retrieval_method": retrieval_method,
+        "relevant_pages": relevant_pages_info,
         "stages": {k: v for k, v in stages.items() if k != "raw"},
         "stage_metrics": stage_metrics,
     }
@@ -494,7 +536,7 @@ def run_benchmark(limit: int = None,
 
     # Load skills
     skill_manager = SkillManager()
-    skill_names = ['pdf_document_qa', 'pdf_text_extractor']
+    skill_names = ['pdf_document_qa', 'pdf_text_extractor', 'pdf_retriever']
 
     # Check if skills exist
     available_skills = skill_manager.list_skills()
@@ -545,6 +587,24 @@ def run_benchmark(limit: int = None,
 
     if HAS_PDF_TOOLS and text_cache:
         print(f"Extracted text from {len(text_cache)} PDFs")
+
+    # Create embeddings for semantic retrieval (if retriever available)
+    embedding_cache = {}
+    if HAS_RETRIEVER and text_cache:
+        print("\nCreating embeddings for semantic retrieval...")
+        for doc_id, extracted_text in text_cache.items():
+            try:
+                # Get PDF path for caching
+                pdf_path = download_pdf(doc_id)
+                if pdf_path:
+                    embeddings = get_or_create_embeddings(str(pdf_path), extracted_text)
+                    embedding_cache[doc_id] = embeddings
+                    print(f"  ✓ {doc_id} ({embeddings.get('total_pages', 0)} pages embedded)")
+            except Exception as e:
+                print(f"  ✗ {doc_id} (embedding failed: {e})")
+
+        if embedding_cache:
+            print(f"Created embeddings for {len(embedding_cache)} PDFs")
 
     # Filter samples to only those with available documents
     samples = [s for s in samples if s["doc_id"] in doc_cache]
@@ -602,24 +662,33 @@ def run_benchmark(limit: int = None,
             skill_trace = None
             try:
                 extracted_text = text_cache.get(doc_id)
+                page_embeddings = embedding_cache.get(doc_id)
                 full_response, pred_skill, skill_trace = ask_with_skill(
                     doc_content, question, answer_format, skill_prompt, model,
                     extracted_text=extracted_text,
+                    page_embeddings=page_embeddings,
                     use_images=use_images, use_gpt_extraction=use_gpt_extraction
                 )
                 score_skill = eval_score(pred_skill, answer, answer_format)
 
-                # Print stage info
+                # Print retrieval info
+                retrieval_method = skill_trace.get("retrieval_method", "none") if skill_trace else "none"
+
+                # Print stage info with retrieval method
                 if skill_trace and skill_trace.get("stage_metrics"):
                     metrics = skill_trace["stage_metrics"]
                     stages_str = "/".join([s.upper()[:3] for s in metrics.get("stages_completed", [])])
+                    ret_str = f"[{retrieval_method}]" if retrieval_method else ""
                     if stages_str:
-                        print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f} [{stages_str}]")
+                        print(f"Skill:    {pred_skill[:40]}... -> {score_skill:.2f} {ret_str} [{stages_str}]")
                     else:
-                        print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f}")
+                        print(f"Skill:    {pred_skill[:40]}... -> {score_skill:.2f} {ret_str}")
+                    # Add retrieval method to metrics for aggregation
+                    metrics["retrieval_method"] = retrieval_method
                     stage_metrics_list.append(metrics)
                 else:
-                    print(f"Skill:    {pred_skill[:50]}... -> {score_skill:.2f}")
+                    ret_str = f"[{retrieval_method}]" if retrieval_method else ""
+                    print(f"Skill:    {pred_skill[:40]}... -> {score_skill:.2f} {ret_str}")
             except Exception as e:
                 pred_skill = ""
                 full_response = ""
@@ -697,7 +766,15 @@ def run_benchmark(limit: int = None,
         total = len(stage_metrics_list)
         in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
         avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
-        keyword_search_count = sum(1 for s in stage_metrics_list if s.get("keyword_search_used", False))
+
+        # Count retrieval methods
+        retrieval_counts = {"semantic": 0, "keyword": 0, "none": 0, "fallback": 0}
+        for s in stage_metrics_list:
+            method = s.get("retrieval_method", "none")
+            if method in retrieval_counts:
+                retrieval_counts[method] += 1
+            else:
+                retrieval_counts["none"] += 1
 
         # Count each stage
         expected_stages = ["understand", "locate", "extract", "answer"]
@@ -712,8 +789,8 @@ def run_benchmark(limit: int = None,
             "stages_in_order_count": in_order_count,
             "stages_in_order_rate": in_order_count / total,
             "avg_completion_rate": avg_completion,
-            "keyword_search_count": keyword_search_count,
-            "keyword_search_rate": keyword_search_count / total,
+            "retrieval_counts": retrieval_counts,
+            "retrieval_rates": {k: v / total for k, v in retrieval_counts.items()},
             "stage_counts": stage_counts,
             "stage_rates": {k: v / total for k, v in stage_counts.items()},
         }
@@ -721,7 +798,10 @@ def run_benchmark(limit: int = None,
         print(f"\n[Skill Mode]")
         print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
         print(f"  Avg completion rate: {avg_completion:.1%}")
-        print(f"  Keyword search used: {keyword_search_count}/{total} ({keyword_search_count/total:.1%})")
+        print(f"  Retrieval methods:")
+        for method, count in retrieval_counts.items():
+            if count > 0:
+                print(f"    {method}: {count}/{total} ({count/total:.1%})")
         print(f"  Stage breakdown:")
         for stage, count in stage_counts.items():
             print(f"    {stage}: {count}/{total} ({count/total:.1%})")
