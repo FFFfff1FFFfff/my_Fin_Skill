@@ -24,7 +24,7 @@ from data_loader import load_chartqapro, load_sample_data, get_question_type_sta
 from evaluator import relaxed_correctness, evaluate_batch
 
 # Import CoT prompts from skill
-from skills.chartqa_cot.cot_prompts import COT_PROMPTS, get_cot_prompt, EXPECTED_STAGES
+from skills.chartqa_cot.cot_prompts import COT_PROMPTS, get_cot_prompt, KEY_STAGES
 
 client = Anthropic()
 
@@ -104,108 +104,37 @@ Question: {question}""",
 
 
 # =============================================================================
-# STAGE PARSING: Extract structured reasoning stages from CoT response
+# STAGE PARSING: Extract key reasoning stages from CoT response
 # =============================================================================
 
 def parse_cot_stages(response_text: str) -> dict:
-    """
-    Parse CoT response to extract structured reasoning stages.
+    """Parse CoT response to extract key stages: read, calculate, answer."""
+    stages = {"read": None, "calculate": None, "answer": None, "raw": response_text}
 
-    Expected format in response (using official paper + stage markers):
-    [UNDERSTAND]: ...
-    [LOCATE]: ...
-    [READ]: ...
-    [CALCULATE]/[EVALUATE]/[COMPARE]: ...
-    [VERIFY]: ...
-    The answer is ...
-    """
-    stages = {
-        "understand": None,   # What is the question asking
-        "locate": None,       # Where in chart is data
-        "read": None,         # Exact values read
-        "calculate": None,    # Calculation/evaluation/comparison
-        "verify": None,       # Verification
-        "final": None,        # Final answer
-        "raw": response_text, # Full response for debugging
-    }
+    # READ
+    match = re.search(r'\[READ\]:\s*(.+?)(?=\[CALC|\[EVAL|\[COMP|\[VERIFY\]|The answer is|$)',
+                      response_text, re.DOTALL | re.IGNORECASE)
+    if match:
+        stages["read"] = match.group(1).strip()[:100]
 
-    # Extract each stage using regex
-    patterns = {
-        "understand": r'\[UNDERSTAND\]:\s*(.+?)(?=\[LOCATE\]|\[READ\]|\[CALC|\[EVAL|\[COMP|\[VERIFY\]|\[CONTEXT\]|The answer is|$)',
-        "locate": r'\[LOCATE\]:\s*(.+?)(?=\[READ\]|\[CALC|\[EVAL|\[COMP|\[VERIFY\]|The answer is|$)',
-        "read": r'\[READ\]:\s*(.+?)(?=\[CALC|\[EVAL|\[COMP|\[VERIFY\]|The answer is|$)',
-        "calculate": r'\[(?:CALCULATE|EVALUATE|COMPARE)\]:\s*(.+?)(?=\[VERIFY\]|The answer is|$)',
-        "verify": r'\[VERIFY\]:\s*(.+?)(?=The answer is|$)',
-        "final": r'The answer is\s+(.+?)(?:\.|$)',
-    }
+    # CALCULATE (or EVALUATE/COMPARE)
+    match = re.search(r'\[(?:CALCULATE|EVALUATE|COMPARE)\]:\s*(.+?)(?=\[VERIFY\]|The answer is|$)',
+                      response_text, re.DOTALL | re.IGNORECASE)
+    if match:
+        stages["calculate"] = match.group(1).strip()[:100]
 
-    for stage, pattern in patterns.items():
-        match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
-        if match:
-            content = match.group(1).strip()
-            if content:
-                stages[stage] = content
-
-    # Also try to capture context stage for conversational
-    context_match = re.search(r'\[CONTEXT\]:\s*(.+?)(?=\[UNDERSTAND\]|$)', response_text, re.DOTALL | re.IGNORECASE)
-    if context_match:
-        stages["context"] = context_match.group(1).strip()
-
-    # More robust Final Answer extraction if not found
-    if not stages["final"]:
-        alt_patterns = [
-            r'The answer is\s*[:\s]*(.+?)(?:\.|,|\n|$)',
-            r'(?:^|\n)\s*([a-d])\s*$',  # Single letter at end for multi-choice
-            r'(?:^|\n)\s*(true|false)\s*$',  # True/False at end
-            r"(?:^|\n)\s*\[?'?([^'[\]]+)'?\]?\s*$",  # Last line as answer
-        ]
-        for pat in alt_patterns:
-            match = re.search(pat, response_text, re.IGNORECASE | re.MULTILINE)
-            if match:
-                stages["final"] = match.group(1).strip().strip("'\"").strip()
-                break
+    # ANSWER
+    match = re.search(r'The answer is\s+(.+?)(?:\.|,|\n|$)', response_text, re.IGNORECASE)
+    if match:
+        stages["answer"] = match.group(1).strip()[:100]
 
     return stages
 
 
 def analyze_stage_metrics(stages: dict) -> dict:
-    """
-    Analyze stage completion metrics for a sample.
-
-    Returns:
-        dict with metrics:
-        - stages_completed: list of completed stages
-        - stages_in_order: bool (whether stages followed expected order)
-        - total_stages: int
-        - stage_completion_rate: float
-    """
-    # Use expected stages from skill
-    expected_order = EXPECTED_STAGES
-    first_appearance = {}
-
-    for i, stage in enumerate(expected_order):
-        if stages.get(stage):
-            first_appearance[stage] = i
-
-    completed_stages = list(first_appearance.keys())
-
-    # Check if stages are in expected order
-    stages_in_order = True
-    prev_idx = -1
-    for stage in completed_stages:
-        curr_idx = expected_order.index(stage)
-        if curr_idx < prev_idx:
-            stages_in_order = False
-            break
-        prev_idx = curr_idx
-
-    return {
-        "stages_completed": completed_stages,
-        "stages_in_order": stages_in_order,
-        "total_stages": len(completed_stages),
-        "stage_completion_rate": len(completed_stages) / len(expected_order),
-        "expected_stages": expected_order,
-    }
+    """Analyze stage completion metrics."""
+    completed = [s for s in KEY_STAGES if stages.get(s)]
+    return {"stages_completed": completed, "total_stages": len(completed)}
 
 
 def create_image_message(image_base64: str, text: str) -> list:
@@ -613,38 +542,18 @@ def run_benchmark(limit: int = None,
 
     # Stage Monitor Summary
     print("\n" + "-" * 40)
-    print("STAGE MONITOR SUMMARY")
+    print("STAGE MONITOR")
     aggregated_stage_metrics = {}
     if stage_metrics_list:
         total = len(stage_metrics_list)
-        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
-        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
-
-        # Count each stage (using expected stages from skill)
-        expected_stages = EXPECTED_STAGES
-        stage_counts = {stage: 0 for stage in expected_stages}
+        stage_counts = {stage: 0 for stage in KEY_STAGES}
         for s in stage_metrics_list:
             for stage in s.get("stages_completed", []):
                 if stage in stage_counts:
                     stage_counts[stage] += 1
-
-        aggregated_stage_metrics = {
-            "total_samples": total,
-            "stages_in_order_count": in_order_count,
-            "stages_in_order_rate": in_order_count / total,
-            "avg_completion_rate": avg_completion,
-            "stage_counts": stage_counts,
-            "stage_rates": {k: v / total for k, v in stage_counts.items()},
-        }
-
-        print(f"\n[CoT Mode]")
-        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
-        print(f"  Avg completion rate: {avg_completion:.1%}")
-        print(f"  Stage breakdown:")
-        for stage, count in stage_counts.items():
-            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
-    else:
-        print("\n  No stage metrics collected (no successful CoT responses)")
+        aggregated_stage_metrics = {"total": total, "stages": stage_counts}
+        stage_str = ", ".join([f"{k}:{v}" for k, v in stage_counts.items()])
+        print(f"  Stages: {stage_str}")
 
     # Save results with full traces
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
