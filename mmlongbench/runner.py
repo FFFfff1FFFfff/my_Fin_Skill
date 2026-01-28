@@ -796,9 +796,9 @@ def run_benchmark(limit: int = None,
             "stages": stage_counts,
         }
 
-        # Print compact summary
-        ret_str = ", ".join([f"{k}:{v}" for k, v in retrieval_counts.items() if v > 0])
-        stage_str = ", ".join([f"{k}:{v}" for k, v in stage_counts.items()])
+        # Print compact summary with percentages
+        ret_str = ", ".join([f"{k}:{v/total:.0%}" for k, v in retrieval_counts.items() if v > 0])
+        stage_str = ", ".join([f"{k}:{v/total:.0%}" for k, v in stage_counts.items()])
         print(f"  Retrieval: {ret_str}")
         print(f"  Stages: {stage_str}")
 

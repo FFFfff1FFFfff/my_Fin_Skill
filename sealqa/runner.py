@@ -29,32 +29,17 @@ client = Anthropic()
 
 
 # =============================================================================
-# STAGE MONITOR: Track reasoning stages in conflicting_info_reasoner flow
+# STAGE MONITOR: Track key reasoning stages (simplified to 3)
 # =============================================================================
+
+KEY_STAGES = ["search", "reason", "answer"]
+
 
 def parse_skill_stages(response_text: str, used_web_search: bool = False) -> dict:
     """
-    Parse skill response to extract structured reasoning stages.
-
-    Expected stages based on conflicting_info_reasoner skill:
-    - SEARCH: Web search was used or search results mentioned
-    - CATEGORIZE: Source reliability assessment (explicit rating)
-    - DETECT: Conflict detection between sources (explicit mention)
-    - RESOLVE: Reasoning to resolve conflicts or reach conclusion
-    - FINAL: Final answer is provided
-
-    Args:
-        response_text: The LLM response text
-        used_web_search: Whether web search tool was actually invoked
+    Parse skill response to extract key stages: search, reason, answer.
     """
-    stages = {
-        "search": None,       # Search findings
-        "categorize": None,   # Source reliability rating
-        "detect": None,       # Conflict detection
-        "resolve": None,      # Conflict resolution
-        "final": None,        # Final answer
-        "raw": response_text,
-    }
+    stages = {"search": None, "reason": None, "answer": None, "raw": response_text}
 
     # SEARCH: Web search was used OR explicit mention of search/sources
     if used_web_search:
@@ -63,128 +48,46 @@ def parse_skill_stages(response_text: str, used_web_search: bool = False) -> dic
         search_patterns = [
             r'(?:search results?|web search|I searched)',
             r'(?:according to|based on)\s+(?:my\s+)?search',
-            r'(?:found|retrieved)\s+(?:information|results)',
             r'sources?\s+(?:indicate|show|report|state)',
         ]
         for pattern in search_patterns:
-            match = re.search(pattern, response_text, re.IGNORECASE)
-            if match:
-                start = max(0, match.start() - 10)
-                end = min(len(response_text), match.end() + 80)
-                stages["search"] = response_text[start:end].strip()[:200]
+            if re.search(pattern, response_text, re.IGNORECASE):
+                stages["search"] = "mentioned"
                 break
 
-    # CATEGORIZE: Explicit source reliability assessment
-    # Must have explicit reliability/credibility language
-    categorize_patterns = [
-        r'(?:source|website|site)\s*(?:is|are)\s*(?:reliable|unreliable|credible|trustworthy)',
-        r'(?:reliability|credibility|trustworthiness)\s*[:=]?\s*(?:high|medium|low|good|poor)',
-        r'(?:official|authoritative|reputable)\s+(?:source|website)',
-        r'(?:primary|secondary|tertiary)\s+source',
+    # REASON: Any reasoning/analysis (conflict detection, source evaluation, comparison)
+    reason_patterns = [
+        r'(?:therefore|thus|consequently|because|since)',
+        r'(?:comparing|considering|weighing|analyzing)',
+        r'(?:reliable|credible|trustworthy)',
+        r'(?:conflict|contradiction|discrepancy)',
     ]
-    for pattern in categorize_patterns:
-        match = re.search(pattern, response_text, re.IGNORECASE)
-        if match:
-            start = max(0, match.start() - 10)
-            end = min(len(response_text), match.end() + 60)
-            stages["categorize"] = response_text[start:end].strip()[:150]
+    for pattern in reason_patterns:
+        if re.search(pattern, response_text, re.IGNORECASE):
+            stages["reason"] = "detected"
             break
 
-    # DETECT: Explicit conflict/contradiction detection
-    # Must explicitly mention conflicts or contradictions
-    detect_patterns = [
-        r'(?:conflict|contradiction|discrepancy)\s+(?:between|in|found)',
-        r'(?:conflicting|contradictory)\s+(?:information|sources|data|reports)',
-        r'sources?\s+(?:disagree|differ|conflict)',
-        r'(?:inconsistent|contradicting)\s+(?:information|claims|statements)',
-        r'found\s+(?:conflicting|different)\s+(?:information|answers)',
-    ]
-    for pattern in detect_patterns:
-        match = re.search(pattern, response_text, re.IGNORECASE)
-        if match:
-            start = max(0, match.start() - 10)
-            end = min(len(response_text), match.end() + 80)
-            stages["detect"] = response_text[start:end].strip()[:150]
-            break
-
-    # RESOLVE: Explicit reasoning/resolution step
-    # Must show reasoning process, not just conclusions
-    resolve_patterns = [
-        r'(?:resolving|to resolve)\s+(?:this|the)\s+(?:conflict|contradiction)',
-        r'(?:weighing|considering|comparing)\s+(?:the\s+)?(?:sources|evidence)',
-        r'(?:more reliable|most credible|best supported)',
-        r'(?:given|considering)\s+(?:the\s+)?(?:evidence|sources|reliability)',
-        r'(?:therefore|thus|consequently),?\s+(?:I|we|the)',
-    ]
-    for pattern in resolve_patterns:
-        match = re.search(pattern, response_text, re.IGNORECASE)
-        if match:
-            start = max(0, match.start() - 10)
-            end = min(len(response_text), match.end() + 80)
-            stages["resolve"] = response_text[start:end].strip()[:150]
-            break
-
-    # FINAL: Final answer is provided (always check)
-    # Look for explicit answer markers or the substantive answer
-    final_patterns = [
-        r'\*\*(?:answer|final answer)\*\*[:\s]*(.+?)(?:\n|$)',  # **Answer**: ...
+    # ANSWER: Final answer
+    answer_patterns = [
+        r'\*\*(?:answer|final answer)\*\*[:\s]*(.+?)(?:\n|$)',
         r'(?:the answer is|answer:|final answer:)\s*(.+?)(?:\.|$)',
-        r'(?:in conclusion|to summarize|in summary)[,:]?\s*(.+?)(?:\.|$)',
     ]
-    for pattern in final_patterns:
+    for pattern in answer_patterns:
         match = re.search(pattern, response_text, re.IGNORECASE)
         if match:
-            content = match.group(1).strip() if match.lastindex else match.group(0).strip()
-            if len(content) > 5:  # Avoid empty matches
-                stages["final"] = content[:200]
-                break
+            stages["answer"] = match.group(1).strip()[:100] if match.lastindex else "found"
+            break
 
-    # If no explicit final answer marker, check if response has substantive content
-    if not stages["final"] and len(response_text.strip()) > 20:
-        # Use first substantive line as the answer indicator
-        lines = [l.strip() for l in response_text.split('\n') if l.strip() and len(l.strip()) > 10]
-        if lines:
-            stages["final"] = lines[0][:200]
+    if not stages["answer"] and len(response_text.strip()) > 20:
+        stages["answer"] = "implicit"
 
     return stages
 
 
 def analyze_stage_metrics(stages: dict) -> dict:
-    """
-    Analyze stage completion metrics for a sample.
-
-    Returns:
-        dict with metrics:
-        - stages_completed: list of completed stages
-        - stages_in_order: bool (whether stages followed expected order)
-        - total_stages: int
-        - stage_completion_rate: float
-    """
-    expected_order = ["search", "categorize", "detect", "resolve", "final"]
-    completed_stages = []
-
-    for stage in expected_order:
-        if stages.get(stage):
-            completed_stages.append(stage)
-
-    # Check if stages are in expected order (strict)
-    stages_in_order = True
-    last_idx = -1
-    for stage in completed_stages:
-        if stage in expected_order:
-            idx = expected_order.index(stage)
-            if idx < last_idx:
-                stages_in_order = False
-                break
-            last_idx = idx
-
-    return {
-        "stages_completed": completed_stages,
-        "stages_in_order": stages_in_order,
-        "total_stages": len(completed_stages),
-        "stage_completion_rate": len(completed_stages) / len(expected_order),
-        "expected_stages": expected_order,
-    }
+    """Analyze stage completion metrics."""
+    completed = [s for s in KEY_STAGES if stages.get(s)]
+    return {"stages_completed": completed, "total_stages": len(completed)}
 
 
 # =============================================================================
@@ -471,35 +374,18 @@ def run_benchmark(source: str = "sample", limit: int = None,
 
     # Stage Monitor Summary
     print("\n" + "-" * 40)
-    print("STAGE MONITOR SUMMARY")
+    print("STAGE MONITOR")
     aggregated_stage_metrics = {}
     if stage_metrics_list:
         total = len(stage_metrics_list)
-        in_order_count = sum(1 for s in stage_metrics_list if s.get("stages_in_order", False))
-        avg_completion = sum(s.get("stage_completion_rate", 0) for s in stage_metrics_list) / total
-
-        # Count each stage
-        stage_counts = {"search": 0, "categorize": 0, "detect": 0, "resolve": 0, "final": 0}
+        stage_counts = {stage: 0 for stage in KEY_STAGES}
         for s in stage_metrics_list:
             for stage in s.get("stages_completed", []):
                 if stage in stage_counts:
                     stage_counts[stage] += 1
-
-        aggregated_stage_metrics = {
-            "total_samples": total,
-            "stages_in_order_count": in_order_count,
-            "stages_in_order_rate": in_order_count / total,
-            "avg_completion_rate": avg_completion,
-            "stage_counts": stage_counts,
-            "stage_rates": {k: v / total for k, v in stage_counts.items()},
-        }
-
-        print(f"\n[Skill Mode]")
-        print(f"  Stages in order: {in_order_count}/{total} ({in_order_count/total:.1%})")
-        print(f"  Avg completion rate: {avg_completion:.1%}")
-        print(f"  Stage breakdown:")
-        for stage, count in stage_counts.items():
-            print(f"    {stage}: {count}/{total} ({count/total:.1%})")
+        aggregated_stage_metrics = {"total": total, "stages": stage_counts}
+        stage_str = ", ".join([f"{k}:{v/total:.0%}" for k, v in stage_counts.items()])
+        print(f"  Stages: {stage_str}")
 
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
