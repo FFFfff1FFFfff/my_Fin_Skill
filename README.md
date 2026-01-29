@@ -17,15 +17,17 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on QA tasks
 
 | Skill | Purpose | Benchmark |
 |-------|---------|-----------|
+| `chartqa_cot` | 5-stage CoT prompting for chart QA | ChartQAPro |
 | `finqa_reasoning` | Step-by-step financial calculation | FinQA |
 | `formula_code_assistant` | Generate Python for numeric computation | FinQA |
-| `table_reasoning` | Structured table analysis | TableBench |
+| `table_reasoning` | Structured table analysis (TCoT) | TableBench |
+| `tablebench_pot` | Program-of-Thought code execution | TableBench |
 | `web_search_tool` | Web search integration | SealQA |
 | `conflicting_info_reasoner` | Resolve contradictory sources | SealQA |
 | `pdf_document_qa` | PDF comprehension strategies | MMLongBench |
-| `pdf_text_extractor` | Extract text/tables from PDF | MMLongBench |
-| `chart_data_extractor` | Extract data from chart images | ChartQAPro |
-| `spreadsheet_schema_analyzer` | Excel structure analysis | SpreadsheetBench |
+| `pdf_text_extractor` | Extract text from PDF pages | MMLongBench |
+| `pdf_retriever` | Semantic page retrieval via Voyage AI | MMLongBench |
+| `spreadsheet_pot` | Multi-round ReAct for Excel manipulation | SpreadsheetBench |
 
 ## Key Options
 
