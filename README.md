@@ -2,6 +2,15 @@
 
 Benchmark comparing Claude's baseline vs skill-augmented performance on QA tasks.
 
+## Setup
+
+```bash
+pip install anthropic openpyxl pypdf voyageai
+
+export ANTHROPIC_API_KEY="your-key"
+export VOYAGE_API_KEY="your-key"  # for MMLongBench semantic retrieval
+```
+
 ## Benchmarks & Commands
 
 | Benchmark | Task | Metric | Command |
@@ -28,23 +37,6 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on QA tasks
 | `pdf_text_extractor` | Extract text from PDF pages | MMLongBench |
 | `pdf_retriever` | Semantic page retrieval via Voyage AI | MMLongBench |
 | `spreadsheet_pot` | Multi-round ReAct for Excel manipulation | SpreadsheetBench |
-
-## Key Options
-
-```bash
-# All benchmarks use sensible defaults, just add --limit
-python finqa/runner.py --limit 50
-python tablebench/runner.py --limit 50      # default: huggingface, NOVIZ
-python sealqa/runner.py --limit 50          # default: seal_hard, builtin search
-python mmlongbench/runner.py --limit 50
-python chartqapro/runner.py --limit 50
-python spreadsheetbench/runner.py --limit 50  # default: verified_400, compare
-
-# Optional overrides
-python tablebench/runner.py --qtype FC --limit 50      # specific question type
-python sealqa/runner.py --source seal_0 --limit 50     # different dataset
-python spreadsheetbench/runner.py --setting row_react_exec --limit 50  # single setting
-```
 
 ## Project Structure
 
