@@ -417,16 +417,11 @@ Question: {question}
 Provide your answer. End with:
 Final Answer: [your answer]"""
 
-    # Use a simpler system prompt instead of the full skill framework
-    simple_skill_prompt = """You are a document analysis expert. Extract information accurately from the provided document.
-For questions about data: look for exact numbers, dates, and names.
-For list questions: identify all items that match the criteria.
-If information is not in the document, state "Not answerable"."""
-
+    # Use skill_prompt from SKILL.md (loaded via SkillManager)
     if use_images:
-        msg_data = create_images_message(doc_content, prompt, system_prompt=simple_skill_prompt)
+        msg_data = create_images_message(doc_content, prompt, system_prompt=skill_prompt)
     else:
-        msg_data = create_pdf_message(doc_content, prompt, system_prompt=simple_skill_prompt)
+        msg_data = create_pdf_message(doc_content, prompt, system_prompt=skill_prompt)
 
     response = client.messages.create(
         model=model,
