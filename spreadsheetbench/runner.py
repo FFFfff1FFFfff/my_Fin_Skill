@@ -583,12 +583,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SpreadsheetBench PoT Runner")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
-    parser.add_argument("--setting", type=str, default="row_react_exec",
+    parser.add_argument("--setting", type=str, default="compare",
                         choices=["row_react_exec", "pure_react_exec", "react_exec", "compare"])
     parser.add_argument("--max-turns", type=int, default=5)
     parser.add_argument("--sample", action="store_true")
     parser.add_argument("--data-dir", type=str, default=None)
-    parser.add_argument("--dataset", type=str, default="sample_200",
+    parser.add_argument("--dataset", type=str, default="verified_400",
                         choices=["sample_200", "full_912", "verified_400"],
                         help="Dataset: sample_200, full_912, verified_400")
     parser.add_argument("--output", "-o", type=str, default=None, help="Output JSON file")

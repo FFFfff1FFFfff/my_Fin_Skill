@@ -703,12 +703,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="TableBench Skill Benchmark")
-    parser.add_argument("--source", type=str, default="sample",
+    parser.add_argument("--source", type=str, default="huggingface",
                         help="Data source: 'sample', 'huggingface', or path to local file")
     parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
     parser.add_argument("--offset", type=int, default=0, help="Skip first N samples")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-5-20250929", help="Model to use")
-    parser.add_argument("--qtype", type=str, default=None,
+    parser.add_argument("--qtype", type=str, default="NOVIZ",
                         help="Filter by question type: FC, NR, DA, VIZ, or NOVIZ (skip VIZ, test others)")
 
     args = parser.parse_args()

@@ -419,7 +419,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="SealQA Skill Benchmark")
-    parser.add_argument("--source", type=str, default="sample",
+    parser.add_argument("--source", type=str, default="seal_hard",
                         help="Data source: 'sample', 'seal_0', 'seal_hard', 'longseal', or path")
     parser.add_argument("--limit", type=int, default=None, help="Number of samples (default: all)")
     parser.add_argument("--search", action="store_true", default=True, help="Enable web search")
