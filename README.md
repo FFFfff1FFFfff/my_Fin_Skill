@@ -5,7 +5,7 @@ Benchmark comparing Claude's baseline vs skill-augmented performance on QA tasks
 ## Setup
 
 ```bash
-pip install anthropic openpyxl pypdf voyageai
+pip install -r requirements.txt
 
 export ANTHROPIC_API_KEY="your-key"
 export VOYAGE_API_KEY="your-key"  # for MMLongBench semantic retrieval
